@@ -1,0 +1,29 @@
+# 开发文档（个人笔记，不纳入版本控制）
+code/v0.1/DEV-NOTES.md
+
+# Python 虚拟环境
+.venv/
+
+# vscode配置等
+.vscode/
+
+# 垃圾桶（废弃 / 待清理内容，不纳入版本控制）
+垃圾桶/
+
+# 构建产物与临时文件
+.build/
+pip-*/
+sandbox-acl-reports/
+**/__pycache__/
+*.pyc
+
+# 运行日志、崩溃报告、截图
+code/v0.1/logs/
+code/v0.1/crashes/
+code/v0.1/screenshots/
+code/v0.1/saves/
+.cache/
+code/v0.1/.cache/
+
+# 完整卡图资源，使用 download_assets.py 获取
+code/v0.1/mods/kards/assets/
