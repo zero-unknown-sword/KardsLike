@@ -50,7 +50,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
 
     def apply(target: Card) -> None:
         if target is not None:
-            ground.damage(target, 5, DamageType.NONE, card)
+            ground.damage(target, 5, card, DamageType.NONE)
 
     ground.request_target(
         player,

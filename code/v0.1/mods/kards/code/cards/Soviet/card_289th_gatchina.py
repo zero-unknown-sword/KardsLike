@@ -30,11 +30,9 @@ def last_rites(card: Card, event: Event, ground: BattleGround) -> None:
         event: LEAVE 事件
         ground: 战斗全局参数
     """
-    player = card.controller or card.owner
-    if player is None:
-        return
+    player = card.controller
     # 获取抽到的卡牌
-    drawn = ground.draw(player)
+    drawn = ground.draw(player, card)
     if drawn:
         ground.hqs[player].buff(df=drawn.cost)
 
@@ -53,7 +51,7 @@ CARD_DATA = CardData(
     keywords=[BLITZ, BOND, DESTRUCTION],
     procedures=[
         Procedure(
-            "destruction",
+            DESTRUCTION,
             lambda card, event, ground: event.card is card,
             last_rites,
         )

@@ -47,8 +47,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    if card.controller is None:
-        return
     for item in ground.decks[card.controller].cards:
         if item.is_unit:
             item.apply_permanent(at=1)

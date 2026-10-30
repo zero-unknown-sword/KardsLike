@@ -64,10 +64,10 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         return
 
     def apply(target: Card) -> None:
-        friendly = target.owner is event.player
+        friendly = target.controller is event.player
         ground.return_unit(target, card)
         if friendly:
-            ground.draw(event.player)
+            ground.draw(event.player, card)
 
     ground.request_target(
         event.player,

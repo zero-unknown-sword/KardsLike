@@ -49,7 +49,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         ground: 战斗全局参数
     """
     line = card.line
-    if line is None or card.controller is None:
+    if line is None:
         return
     index = line.units.index(card)
     insert_at = index + 1

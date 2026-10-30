@@ -18,7 +18,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    ground.draw(event.player)
+    ground.draw(event.player, card)
 
 
 from mods.kards.code.keywords.intel import KEYWORD as INTEL

@@ -49,8 +49,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    if card.controller is not None:
-        ground.buff(ground.hqs[card.controller], df=2)
+    ground.buff(ground.hqs[card.controller], df=2)
 
 
 from mods.kards.code.keywords.smoke import KEYWORD as SMOKE

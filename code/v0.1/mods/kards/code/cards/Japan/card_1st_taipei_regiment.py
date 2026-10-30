@@ -19,7 +19,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    ground.damage(ground.hqs[event.player.opponent], 2, DamageType.NONE, ground.NOSOURCE)
+    ground.damage(ground.hqs[event.player.opponent], 2, card, DamageType.NONE)
 
 
 from mods.kards.code.keywords.blitz import KEYWORD as BLITZ
@@ -38,5 +38,5 @@ CARD_DATA = CardData(
     df=3,
     operation_cost=0,
     keywords=[BLITZ, DESTRUCTION],
-    procedures=[Procedure("destruction", lambda card, event, ground: True, action)],
+    procedures=[Procedure(DESTRUCTION, lambda card, event, ground: True, action)],
 )

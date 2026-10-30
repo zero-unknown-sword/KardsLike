@@ -48,7 +48,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def apply(target: Card) -> None:
         if target is not None:
             ground.suppress(target)
-            ground.draw(player)
+            ground.draw(player, card)
 
     ground.request_target(
         player,

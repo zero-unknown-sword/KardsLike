@@ -31,8 +31,6 @@ def aura(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    if card.controller is None:
-        return
     for line in (
         ground.support_lines[Player.A],
         ground.support_lines[Player.B],

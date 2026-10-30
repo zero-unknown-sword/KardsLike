@@ -19,7 +19,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         ground: 战斗全局参数
     """
     for _ in range(4):
-        ground.draw(event.player)
+        ground.draw(event.player, card)
 
 
 from main import Rarity

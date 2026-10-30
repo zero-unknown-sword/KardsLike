@@ -11,6 +11,7 @@ from main import (
     BattleGround,
     Card,
     CardData,
+    CardTag,
     CardType,
     Country,
     Event,
@@ -48,12 +49,13 @@ CARD_DATA = CardData(
     cost=6,
     display_name="第 18 神射手团",
     text="部署：将 1 张“第 9 神射手团”洗入卡组。",
-    rare=Rarity.SPECIAL,
+    rare=Rarity.NONE,
     at=6,
     df=8,
     operation_cost=1,
     keywords=[BLITZ, BOND, GUARD, DEPLOYMENT],
+    tags=[CardTag.NOT_IN_START],
     procedures=[
-        Procedure("deployment", lambda card, event, ground: True, deploy_action),
+        Procedure(DEPLOYMENT, lambda card, event, ground: True, deploy_action),
     ],
 )

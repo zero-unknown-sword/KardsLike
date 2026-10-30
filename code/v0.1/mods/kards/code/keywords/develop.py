@@ -15,7 +15,7 @@ KEYWORD = KeywordData(
 )
 
 
-def execute(ground: BattleGround, player: Player, source: Card | None = None) -> bool:
+def execute(ground: BattleGround, player: Player, source: Card) -> bool:
     """
     执行开发
 

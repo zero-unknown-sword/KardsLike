@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum, StrEnum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, cast, Any, Callable, TypedDict, Final, Literal
+from typing import TYPE_CHECKING, cast, Any, Callable, TypedDict, Final
 
 import pygame
 
@@ -156,11 +156,15 @@ class Rarity(StrEnum):
         LIMITED: 铜卡
         SPECIAL: 银卡
         ELITE: 金卡
+        NONE: 无稀有度, 衍生牌
     """
     STANDARD = "standard"
     LIMITED = "limited"
     SPECIAL = "special"
     ELITE = "elite"
+    """金卡 (精英)"""
+    NONE = "none"
+    """无稀有度, 用于衍生牌"""
 
 
 class CardType(StrEnum):
@@ -307,6 +311,7 @@ class CardTag(StrEnum):
         SLAM_UP_1: 拍桌等级提升 1 级: 小 -> 中
         SLAM_UP_2: 拍桌等级提升 2 级: 小 -> 大
         NOT_IN_START: 构筑外, 不参与初始卡组构筑
+        SPECIAL_SOURCE: 回合开始抽牌等系统行为的特殊来源
     """
     CANNOT_ACT_WHEN_ENTER = "CANNOT_ACT_WHEN_ENTER"
     """进入战场的当回合无法行动"""
@@ -336,6 +341,8 @@ class CardTag(StrEnum):
     """拍桌等级提升 2 级"""
     NOT_IN_START = "NOT_IN_START"
     """构筑外, 不参与初始卡组构筑(TODO: 名称待定)"""
+    SPECIAL_SOURCE = "SPECIAL_SOURCE"
+    """系统特殊来源"""
 
 
 class EntryMethod(StrEnum):
@@ -671,7 +678,7 @@ class Procedure:
     """流程类, 用于响应(TODO)"""
     def __init__(
         self,
-        trigger: "EventType | str | int",
+        trigger: "EventType | str | int | Keyword",
         condition: Callable[["Card", Event, "BattleGround"], bool],
         action: Callable[["Card", Event, "BattleGround"], None],
         target_valid: Callable[["Card", "Player", "BattleGround"], bool] | None = None,
@@ -683,25 +690,34 @@ class Procedure:
         注册流程
 
         Args:
-            trigger: 触发器, 接收到相同值的事件时触发
+            trigger: 触发器, 可以是事件类型、事件名、事件编号或关键词
             condition: 条件, 运行时执行判断
             action: 执行器
             target_valid: 指向目标合法性判断, 为 None 表示不需要指向
             any_zone: 是否允许在卡组/手牌中响应; 默认只允许在场上
         """
-        self.trigger: int = trigger_id(trigger)
-        """触发器"""
         self.target_valid: Callable[["Card", "Player", "BattleGround"], bool] | None = target_valid
         """指向目标合法性判断"""
         self.any_zone: bool = any_zone
         """是否允许在卡组/手牌中响应"""
         self.trigger_keyword: str | None = None
         """触发器对应的关键词 id, 直接写事件时为 None"""
-        if isinstance(trigger, str) and trigger not in EventType.__members__:
-            for keyword in cards.keywords.values():
-                if keyword.keyword_id == trigger or keyword.name == trigger:
-                    self.trigger_keyword = keyword.keyword_id
-                    break
+        if isinstance(trigger, Keyword):
+            # 关键词触发器: 使用关键词定义里的事件与关键词 id
+            self.trigger_keyword = trigger.keyword_id
+            keyword_data = cards.keywords.get(trigger.keyword_id)
+            self.trigger = (
+                int(keyword_data.trigger)
+                if keyword_data is not None and keyword_data.trigger
+                else trigger_id(trigger.keyword_id)
+            )
+        else:
+            self.trigger = trigger_id(trigger)
+            if isinstance(trigger, str) and trigger not in EventType.__members__:
+                for keyword in cards.keywords.values():
+                    if keyword.keyword_id == trigger or keyword.name == trigger:
+                        self.trigger_keyword = keyword.keyword_id
+                        break
         self.condition: Callable[["Card", Event, "BattleGround"], bool] = condition
         """触发条件"""
         self.action: Callable[["Card", Event, "BattleGround"], None] = action
@@ -880,7 +896,7 @@ class Card:
         self.art: str = art
         self.heal_self: bool = heal_self
         self.procedures: list[Procedure] = procedures if procedures is not None else []
-        self.controller: Player | None = None
+        self.controller: Player = Player.A  # 默认控制者, 进入卡组/手牌/场上时由流程重新指定
         self.owner: Player | None = None
         self.line: "Line | None" = None
         self.zone: Zone = Zone.DECK
@@ -1886,12 +1902,12 @@ class CardChoice:
     """
     player: Player
     cards: list[Card]
+    source: Card
     destination: Zone = Zone.HAND
     develop: bool = False
     origin_deck: bool = False
     unselected_bottom: bool = False
     loot_event: bool = False
-    source: Card | None = None
     title: str = ""
     callback: Callable[[Card, list[Card]], None] | None = None
 
@@ -1938,7 +1954,6 @@ class BattleGround:
         winner: 已分出胜负时的胜方
     """
 
-    NOSOURCE: Final[Literal[None]] = None
     """无来源伤害的来源标识"""
 
     def __init__(self, config: BattleConfig, deck_a: Deck, deck_b: Deck) -> None:
@@ -2040,11 +2055,25 @@ class BattleGround:
         """对局开始发牌, 先手 4 张后手 5 张"""
         second = self.first_player.opponent
         for _ in range(4):
-            self.draw(self.first_player)
+            self.draw(self.first_player, self.special_source(self.first_player))
         for _ in range(5):
-            self.draw(second)
+            self.draw(second, self.special_source(second))
 
-    def draw(self, player: Player) -> Card | None:
+    def special_source(self, player: Player) -> Card:
+        """
+        返回回合开始抽牌等系统行为的特殊来源
+
+        Args:
+            player: 玩家
+
+        Returns:
+            带有 SPECIAL_SOURCE 标签的友方总部
+        """
+        hq = self.hqs[player]
+        hq.add_tag(CardTag.SPECIAL_SOURCE)
+        return hq
+
+    def draw(self, player: Player, source: Card) -> Card | None:
         """
         为玩家抽一张牌, 手牌满 9 张时弃掉抽到的牌
 
@@ -2052,19 +2081,20 @@ class BattleGround:
 
         Args:
             player: 玩家
+            source: 抽牌来源, 回合开始时为带 SPECIAL_SOURCE 标签的总部
 
         Returns:
             抽到的卡牌, 卡组为空时为 None
         """
         card = self.decks[player].draw()
         if card is None:
-            self.morale_damage(player)
+            self.morale_damage(player, source=source)
             return None
         if self.hands[player].add(card):
             card.zone = Zone.HAND
         else:
             self.discard_card(player, card)
-        self.emit(Event(EventType.DRAW, card=card, player=player))
+        self.emit(Event(EventType.DRAW, card=card, player=player, source=source))
         return card
 
     def apply_intel(self, player: Player, card: Card) -> None:
@@ -2096,8 +2126,8 @@ class BattleGround:
     def morale_damage(
         self,
         player: Player,
+        source: Card,
         notify: bool = False,
-        source: Card | None = None,
     ) -> int:
         """
         对玩家总部造成一次士气伤害, 第 X 次受到 X 点
@@ -2105,7 +2135,7 @@ class BattleGround:
         Args:
             player: 玩家
             notify: 是否显示士气伤害提示
-            source: 来源, 缺省为友方总部
+            source: 来源
 
         Returns:
             本次士气伤害数值
@@ -2116,8 +2146,8 @@ class BattleGround:
         self.damage(
             self.hqs[player],
             amount,
+            source,
             DamageType.MORALE,
-            source if source is not None else self.hqs[player],
         )
         if notify:
             label = "友方" if player is Player.A else "敌方"
@@ -2198,8 +2228,8 @@ class BattleGround:
         self,
         target: Card | list[Card],
         amount: int,
+        source: Card,
         kind: DamageType = DamageType.NONE,
-        source: Card | None = None,
     ) -> None:
         """
         对单位或总部造成伤害, 单位死亡时自动送入弃牌堆并广播事件
@@ -2208,13 +2238,11 @@ class BattleGround:
             target: 受伤对象, 可以是单个目标或目标列表
             amount: 伤害量
             kind: 伤害类型
-            source: 伤害来源, 无来源时为 None
+            source: 伤害来源
         """
         targets = target if isinstance(target, list) else [target]
         for item in list(targets):
             event_source = source
-            if event_source is None:
-                event_source = self.hqs[self.turn_owner]
             if self.is_immune(item) and kind is not DamageType.MORALE:
                 continue
             actual = amount
@@ -2255,9 +2283,9 @@ class BattleGround:
     def add_aura(
         self,
         target: Card,
+        source: Card,
         at: int = 0,
         keyword: str | None = None,
-        source: Card | None = None,
     ) -> None:
         """
         应用光环, 并在本次光环首次生效时广播 BUFF
@@ -2269,7 +2297,7 @@ class BattleGround:
             source: 光环来源卡牌
         """
         target.add_aura(at=at, keyword=keyword)
-        source_id = id(source) if source is not None else 0
+        source_id = id(source)
         target.aura_sources.add(source_id)
         if source_id not in target.aura_applied:
             target.aura_applied.add(source_id)
@@ -2277,18 +2305,18 @@ class BattleGround:
                 Event(EventType.BUFF, target=target, at=at, df=0, source=source)
             )
 
-    def kill(self, card: Card, source: Card | None = None) -> None:
+    def kill(self, card: Card, source: Card) -> None:
         """
         把单位送入弃牌堆, 卡牌对象本身不变
 
         Args:
             card: 被消灭的单位
-            source: 伤害来源, 无来源时为 None
+            source: 伤害来源
         """
         if card.line is not None:
             card.line.remove(card)
-        player = card.controller or card.owner
-        if player is not None and card not in self.discards[player]:
+        player = card.controller
+        if card not in self.discards[player]:
             self.discards[player].append(card)
         card.zone = Zone.DISCARD
         leave_event = Event(
@@ -2392,7 +2420,7 @@ class BattleGround:
             if caster is not player:
                 remaining_isolated.append((card, caster))
                 continue
-            owner = card.controller or card.owner or player
+            owner = card.controller
             if self.add_unit(owner, card):
                 card.remove_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
             else:
@@ -2404,12 +2432,13 @@ class BattleGround:
         else:
             self.kredits[player].start_turn()
         self.turns_taken[player] += 1
-        self.draw(player)
+        special_source = self.special_source(player)
+        self.draw(player, special_source)
         extra = self.pending_turn_draws[player]
         if extra > 0:
             self.pending_turn_draws[player] = 0
             for _ in range(extra):
-                self.draw(player)
+                self.draw(player, special_source)
 
     def end_turn(self) -> None:
         """结束当前回合, 移交回合权并开始对方回合并检查胜负"""
@@ -2518,9 +2547,7 @@ class BattleGround:
             是否被守护
         """
         if target.is_hq:
-            owner = target.owner
-            if owner is None:
-                return False
+            owner = target.controller
             line = self.support_lines[owner]
             for index, unit in enumerate(line.units):
                 unit_position = index if index < line.hq_index else index + 1
@@ -2721,7 +2748,7 @@ class BattleGround:
                 elif card.heal_self:
                     self.hqs[player].df += card.cost
                 else:
-                    self.damage(self.hqs[player.opponent], card.cost, DamageType.NONE, card)
+                    self.damage(self.hqs[player.opponent], card.cost, card, DamageType.NONE)
             self.check_victory()
             return True
         return False
@@ -2825,9 +2852,7 @@ class BattleGround:
         """
         if card.zone is not Zone.BOARD:
             return
-        owner = card.owner or card.controller
-        if owner is None:
-            return
+        owner = card.controller
         card.suppressed = True
         card.suppressed_turn = self.turns_taken[owner]
 
@@ -2835,12 +2860,12 @@ class BattleGround:
         self,
         player: Player,
         cards: list[Card],
+        source: Card,
         destination: Zone = Zone.HAND,
         develop: bool = False,
         origin_deck: bool = False,
         unselected_bottom: bool = False,
         loot_event: bool = False,
-        source: Card | None = None,
         title: str = "选择一张牌",
         callback: Callable[[Card, list[Card]], None] | None = None,
     ) -> bool:
@@ -2872,12 +2897,12 @@ class BattleGround:
         self.pending_choice = CardChoice(
             player,
             cards,
+            source,
             destination,
             develop,
             origin_deck,
             unselected_bottom,
             loot_event,
-            source,
             title,
             callback,
         )
@@ -2989,7 +3014,7 @@ class BattleGround:
         if choice.callback is not None:
             choice.callback(card, remaining)
         self.emit(
-            Event(EventType.CHOICE_RESOLVED, card=card, player=choice.player)
+            Event(EventType.CHOICE_RESOLVED, card=card, player=choice.player, source=choice.source)
         )
         return True
 
@@ -3000,7 +3025,7 @@ class BattleGround:
             return False
         return self.resolve_card_choice(random.choice(choice.cards))
 
-    def develop_from_deck(self, player: Player, source: Card | None = None) -> bool:
+    def develop_from_deck(self, player: Player, source: Card) -> bool:
         """
         从卡组随机展示三张牌, 选择一张加入手牌
 
@@ -3020,14 +3045,14 @@ class BattleGround:
         return self.start_card_choice(
             player,
             targets,
-            Zone.HAND,
+            source,
+            destination=Zone.HAND,
             develop=True,
             origin_deck=True,
-            source=source,
             title="开发",
         )
 
-    def develop_from_pool(self, player: Player, source: Card | None = None) -> bool:
+    def develop_from_pool(self, player: Player, source: Card) -> bool:
         """
         从当前卡组中随机展示三张牌, 选择一张加入手牌
 
@@ -3069,14 +3094,14 @@ class BattleGround:
         return self.start_card_choice(
             player,
             choices,
-            Zone.HAND,
+            source,
+            destination=Zone.HAND,
             develop=True,
             origin_deck=False,
-            source=source,
             title="开发",
         )
 
-    def loot_from_deck(self, player: Player, source: Card | None = None) -> bool:
+    def loot_from_deck(self, player: Player, source: Card) -> bool:
         """
         从卡组顶三张牌中选择一张加入手牌
 
@@ -3096,11 +3121,11 @@ class BattleGround:
         return self.start_card_choice(
             player,
             targets,
-            Zone.HAND,
+            source,
+            destination=Zone.HAND,
             origin_deck=True,
             unselected_bottom=True,
             loot_event=True,
-            source=source,
             title="战利品",
         )
 
@@ -3227,9 +3252,11 @@ class BattleGround:
             count = len(cards)
             self.schedule_action(560, lambda: self.shuffle_deck(player))
 
+            special_source = self.special_source(player)
+
             def draw_replacement() -> None:
                 for _ in range(count):
-                    self.draw(player)
+                    self.draw(player, special_source)
 
             self.schedule_action(1200, draw_replacement)
 
@@ -3280,13 +3307,13 @@ class BattleGround:
         card.zone = Zone.HAND
         self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
 
-    def remove_unit(self, card: Card, source: Card | None = None) -> None:
+    def remove_unit(self, card: Card, source: Card) -> None:
         """
         将单位从战场移除(非消灭), 进入移除区
 
         Args:
             card: 单位
-            source: 效果来源, 无来源时为 None
+            source: 效果来源
         """
         player = card.controller
         line = card.line
@@ -3340,7 +3367,7 @@ class BattleGround:
             result.extend(reversed(line.units))
         return result
 
-    def return_unit(self, card: Card, source: Card | None = None) -> None:
+    def return_unit(self, card: Card, source: Card) -> None:
         """
         将单位返回所有者手中, 并重置为初始状态
 
@@ -3348,11 +3375,9 @@ class BattleGround:
 
         Args:
             card: 单位
-            source: 效果来源, 无来源时为 None
+            source: 效果来源
         """
-        player = card.owner or card.controller
-        if player is None:
-            return
+        player = card.controller
         line = card.line
         if line is not None:
             line.remove(card)
@@ -3423,7 +3448,7 @@ class BattleGround:
         self,
         player: Player,
         card: Card,
-        source: Card | None = None,
+        source: Card,
     ) -> bool:
         """
         移除一个单位, 并在该玩家下个回合开始时返回
@@ -3453,7 +3478,7 @@ class BattleGround:
         )
         return True
 
-    def schedule_return(self, card: Card, source: Card | None, delay_ms: int) -> None:
+    def schedule_return(self, card: Card, source: Card, delay_ms: int) -> None:
         """
         延迟将单位返回手牌, 用于逐个结算
 
@@ -3607,16 +3632,16 @@ class BattleGround:
                 ambush_immune = True
         self.emit(Event(EventType.ATTACK, card=card, target=target, player=player))
         if not ambush_immune:
-            self.damage(target, card.at, kind, card)
+            self.damage(target, card.at, card, kind)
         if (
             target.zone is Zone.DISCARD
             and card.has_tag(CardTag.OVERFLOW_DAMAGE)
         ):
             overflow = target.overflow_damage
             if overflow > 0:
-                self.damage(self.hqs[player.opponent], overflow, DamageType.NONE, card)
+                self.damage(self.hqs[player.opponent], overflow, card, DamageType.NONE)
         if counter:
-            self.damage(card, counter_at, DamageType.COUNTER, target)
+            self.damage(card, counter_at, target, DamageType.COUNTER)
         if (
             target.zone is Zone.DISCARD
             and card.zone is Zone.BOARD
@@ -4012,6 +4037,8 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_isolation",
     "kards:card_40_panzergrenadier",
     "kards:card_289th_gatchina",
+    "kards:97th_rifles",
+    "kards:card_414th_rifles",
 ]
 
 
