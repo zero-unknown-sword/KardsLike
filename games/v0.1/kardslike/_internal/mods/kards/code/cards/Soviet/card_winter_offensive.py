@@ -27,7 +27,7 @@ CARD_DATA = CardData(
             EventType.USE,
             lambda card, event, ground: event.dict.get("source") is card,
             lambda card, event, ground: ground.damage(
-                ground.targets, 4, DamageType.NONE, card
+                ground.targets, 4, card, DamageType.NONE
             ),
         )
     ],

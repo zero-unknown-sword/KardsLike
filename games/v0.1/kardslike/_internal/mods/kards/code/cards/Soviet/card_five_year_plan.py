@@ -20,8 +20,8 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     """
     player = event.player
     for _ in range(5):
-        ground.draw(player)
-    ground.damage(ground.hqs[player], 5, DamageType.NONE, card)
+        ground.draw(player, card)
+    ground.damage(ground.hqs[player], 5, card, DamageType.NONE)
 
 
 from main import Rarity

@@ -45,11 +45,9 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    if card.controller is None:
-        return
     enemy_hq = ground.hqs[card.controller.opponent]
     ally_hq = ground.hqs[card.controller]
-    ground.damage(enemy_hq, 1, DamageType.NONE, card)
+    ground.damage(enemy_hq, 1, card, DamageType.NONE)
     ally_hq.buff(df=1)
 
 

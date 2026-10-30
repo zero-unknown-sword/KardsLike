@@ -41,7 +41,7 @@ def deploy_action(card: Card, event: Event, ground: BattleGround) -> None:
         event.player,
         card,
         valid,
-        lambda target: ground.damage(target, 1, DamageType.NONE, card),
+        lambda target: ground.damage(target, 1, card, DamageType.NONE),
     )
 
 
@@ -75,9 +75,9 @@ CARD_DATA = CardData(
     keywords=[DEPLOYMENT, DESTRUCTION],
     tags=[CardTag.NOT_IN_START],
     procedures=[
-        Procedure("deployment", lambda card, event, ground: True, deploy_action),
+        Procedure(DEPLOYMENT, lambda card, event, ground: True, deploy_action),
         Procedure(
-            "destruction",
+            DESTRUCTION,
             lambda card, event, ground: ground.turn_owner is not event.player,
             destroy_action,
         ),

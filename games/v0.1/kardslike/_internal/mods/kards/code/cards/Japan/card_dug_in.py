@@ -50,7 +50,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def apply(target: Card) -> None:
         if not target.is_unit:
             return
-        ground.damage(target, 1, DamageType.NONE, card)
+        ground.damage(target, 1, card, DamageType.NONE)
         ground.give_card(player, "kards:card_shifting_doctrine", Zone.DECK)
         ground.schedule_action(
             ground.add_deck_delay + 610,

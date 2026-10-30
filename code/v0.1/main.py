@@ -4495,30 +4495,33 @@ def draw_menu(
     screen: Surface,
     start_button: Surface,
     start_button_hover: Surface,
+    card_button: Surface,
+    card_button_hover: Surface,
     start_rect: pygame.Rect,
     card_rect: pygame.Rect,
-    font: Font,
 ) -> None:
     """
     绘制主菜单场景
 
     Args:
         screen: 屏幕 Surface
-        start_button: 开始按钮图片
-        start_button_hover: 悬浮时的高亮按钮图片
+        start_button: 开始按钮图标
+        start_button_hover: 开始按钮悬浮图标
+        card_button: 卡牌按钮图标
+        card_button_hover: 卡牌按钮悬浮图标
         start_rect: 开始按钮位置
         card_rect: 卡牌按钮位置
-        font: 按钮文字字体
     """
     screen.fill((0, 0, 0))
     mouse = pygame.mouse.get_pos()
-    for rect, text in ((start_rect, "开始"), (card_rect, "卡牌")):
-        if rect.collidepoint(mouse):
-            screen.blit(start_button_hover, rect)
-        else:
-            screen.blit(start_button, rect)
-        label = font.render(text, True, (255, 255, 255))
-        screen.blit(label, label.get_rect(center=rect.center))
+    screen.blit(
+        start_button_hover if start_rect.collidepoint(mouse) else start_button,
+        start_rect,
+    )
+    screen.blit(
+        card_button_hover if card_rect.collidepoint(mouse) else card_button,
+        card_rect,
+    )
 
 
 def draw_start(screen: Surface, background: Surface, button_group: ButtonGroup) -> None:
@@ -7594,6 +7597,8 @@ def loop(
     screen: Surface,
     start_button: Surface,
     start_button_hover: Surface,
+    card_button: Surface,
+    card_button_hover: Surface,
     start_rect: pygame.Rect,
     card_rect: pygame.Rect,
     background: Surface,
@@ -7606,8 +7611,10 @@ def loop(
 
     Args:
         screen: 屏幕 Surface
-        start_button: 开始按钮图片
-        start_button_hover: 悬浮时的高亮按钮图片
+        start_button: 开始按钮图标
+        start_button_hover: 开始按钮悬浮图标
+        card_button: 卡牌按钮图标
+        card_button_hover: 卡牌按钮悬浮图标
         start_rect: 开始按钮位置
         card_rect: 卡牌按钮位置
         background: 开始界面背景图
@@ -7652,7 +7659,15 @@ def loop(
             )
 
     if Global.status.scene == SCENE_MENU:
-        draw_menu(screen, start_button, start_button_hover, start_rect, card_rect, font)
+        draw_menu(
+            screen,
+            start_button,
+            start_button_hover,
+            card_button,
+            card_button_hover,
+            start_rect,
+            card_rect,
+        )
     elif Global.status.scene == SCENE_START:
         draw_start(screen, background, button_group)
     elif Global.status.scene == SCENE_BATTLE:
@@ -7681,17 +7696,41 @@ def main() -> None:
 
     assets = Path(__file__).resolve().parent / "mods" / "kards" / "assets"
     loader = ImageLoader()
+    button_size = 160
+    button_gap = 24
     start_button = pygame.transform.smoothscale(
         loader.load(assets / "ui" / "开始按钮.png"),
-        (360, 150),
+        (button_size, button_size),
     )
     start_button_hover = start_button.copy()
     start_button_hover.fill((60, 60, 60, 0), special_flags=pygame.BLEND_RGB_ADD)
+
+    # 卡牌按钮使用卡背的中心正方形作为图标
+    card_back = loader.load(assets / "cards" / "card_back.png")
+    side = min(card_back.get_width(), card_back.get_height())
+    card_icon = card_back.subsurface(
+        pygame.Rect(
+            (card_back.get_width() - side) // 2,
+            (card_back.get_height() - side) // 2,
+            side,
+            side,
+        )
+    ).copy()
+    card_button = pygame.transform.smoothscale(card_icon, (button_size, button_size))
+    card_button_hover = card_button.copy()
+    card_button_hover.fill((60, 60, 60, 0), special_flags=pygame.BLEND_RGB_ADD)
+
     background = pygame.transform.smoothscale(
         loader.load(assets / "ui" / "开始背景.png"), screen.get_size()
     )
-    start_rect = pygame.Rect(32, 500, 360, 150)
-    card_rect = pygame.Rect(32, 680, 360, 150)
+    start_y = (screen.get_height() - button_size * 2 - button_gap) // 2
+    start_rect = pygame.Rect(40, start_y, button_size, button_size)
+    card_rect = pygame.Rect(
+        40,
+        start_y + button_size + button_gap,
+        button_size,
+        button_size,
+    )
     font = load_font(36)
     button_group = make_start_buttons(screen.get_width(), screen.get_height(), font)
     Global.battle_ui = BattleUI(loader, assets, font)
@@ -7704,6 +7743,8 @@ def main() -> None:
             screen,
             start_button,
             start_button_hover,
+            card_button,
+            card_button_hover,
             start_rect,
             card_rect,
             background,

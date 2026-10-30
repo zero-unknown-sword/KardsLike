@@ -43,15 +43,13 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: 事件
         ground: 战斗全局参数
     """
-    if card.controller is None:
-        return
     amount = event.dict.get("amount", 0)
     if isinstance(amount, int) and amount > 0:
         ground.damage(
             ground.hqs[card.controller.opponent],
             amount,
-            DamageType.NONE,
             card,
+            DamageType.NONE,
         )
 
 

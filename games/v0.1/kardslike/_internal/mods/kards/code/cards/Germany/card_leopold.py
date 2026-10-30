@@ -44,7 +44,7 @@ CARD_DATA = CardData(
     tags=[CardTag.SLAM_UP_2],
     procedures=[
         Procedure(
-            "deployment",
+            DEPLOYMENT,
             lambda card, event, ground: True,
             action,
         )

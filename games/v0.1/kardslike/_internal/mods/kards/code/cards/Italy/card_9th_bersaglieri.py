@@ -11,7 +11,6 @@ from main import (
     BattleGround,
     Card,
     CardData,
-    CardTag,
     CardType,
     Country,
     Event,
@@ -52,9 +51,8 @@ CARD_DATA = CardData(
     at=5,
     df=6,
     operation_cost=1,
-    tags=[CardTag.NOT_IN_START],
     keywords=[DESTRUCTION, BLITZ, BOND],
     procedures=[
-        Procedure("destruction", lambda card, event, ground: True, destroy_action),
+        Procedure(DESTRUCTION, lambda card, event, ground: True, destroy_action),
     ],
 )

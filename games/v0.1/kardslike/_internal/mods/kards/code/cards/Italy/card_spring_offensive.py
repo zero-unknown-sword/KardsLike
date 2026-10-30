@@ -24,7 +24,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     """
     player = event.player
     for _ in range(2):
-        drawn = ground.draw(player)
+        drawn = ground.draw(player, card)
         if drawn is not None and drawn.is_unit and drawn.at >= 4:
             ground.kredits[player].add_credits(2)
 

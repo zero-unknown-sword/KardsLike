@@ -36,12 +36,12 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
 
         def draw_replacement() -> None:
             for _ in range(2):
-                ground.draw(player)
+                ground.draw(player, card)
 
         ground.schedule_action(700, draw_replacement)
     else:
         for _ in range(2):
-            ground.draw(player)
+            ground.draw(player, card)
 
 
 from main import Rarity

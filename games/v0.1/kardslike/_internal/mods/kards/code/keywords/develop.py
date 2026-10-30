@@ -15,7 +15,7 @@ KEYWORD = KeywordData(
 )
 
 
-def execute(ground: BattleGround, player: Player, source: Card | None = None) -> bool:
+def execute(ground: BattleGround, player: Player, source: Card) -> bool:
     """
     执行开发
 
@@ -28,3 +28,4 @@ def execute(ground: BattleGround, player: Player, source: Card | None = None) ->
         是否成功开始
     """
     return ground.develop_from_pool(player, source)
+ 
