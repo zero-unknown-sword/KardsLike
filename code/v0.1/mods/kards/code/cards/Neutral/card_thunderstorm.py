@@ -21,7 +21,6 @@ from main import (
     Zone,
 )
 import random
-from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
@@ -47,7 +46,7 @@ CARD_DATA = CardData(
     text="造成 3 点伤害，随机分配至所有敌方目标。预报。",
     art="thunderstorm.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, WEATHER],
+    keywords=[WEATHER],
     procedures=[
         Procedure(
             EventType.USE,

@@ -20,7 +20,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
@@ -42,7 +41,7 @@ CARD_DATA = CardData(
     text="所有陆军 +2 攻击力，空军 +3 攻击力，直到回合结束。预报。",
     art="heatwave.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, WEATHER],
+    keywords=[WEATHER],
     procedures=[
         Procedure(
             EventType.USE,

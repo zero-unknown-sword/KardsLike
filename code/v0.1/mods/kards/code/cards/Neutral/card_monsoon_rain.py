@@ -20,7 +20,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
@@ -46,7 +45,7 @@ CARD_DATA = CardData(
     text="双方移除手中或场上 2 张花费最高的卡牌。预报。",
     art="monsoon_rain.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, WEATHER],
+    keywords=[WEATHER],
     procedures=[
         Procedure(
             EventType.USE,

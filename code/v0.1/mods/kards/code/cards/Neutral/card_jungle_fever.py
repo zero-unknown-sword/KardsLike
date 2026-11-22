@@ -20,7 +20,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
@@ -43,7 +42,7 @@ CARD_DATA = CardData(
     text="所有单位 +3 攻击力，压制未攻击的友方单位。预报。",
     art="jungle_fever.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, WEATHER],
+    keywords=[WEATHER],
     procedures=[
         Procedure(
             EventType.USE,

@@ -20,7 +20,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
@@ -41,7 +40,7 @@ CARD_DATA = CardData(
     text="将手中所有单位加入战场，将其压制直到回合结束。预报。",
     art="scorching_sun.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, WEATHER],
+    keywords=[WEATHER],
     procedures=[
         Procedure(
             EventType.USE,
