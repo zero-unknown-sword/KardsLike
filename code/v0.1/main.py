@@ -1104,6 +1104,8 @@ class Card:
         """
         if self.has_tag(CardTag.IGNORE_RESET):
             return
+        # 先移除旧光环, 避免重置后再次扣除 aura_at
+        self.clear_auras()
         if clear_modifiers:
             self.at_bonus = 0
             self.df_bonus = 0
@@ -1125,7 +1127,6 @@ class Card:
         self.suppressed_turn = -1
         self.ambush_used_turn = -1
         self.attacks_turn = 0
-        self.clear_auras()
         self.deployed_turn = -1
 
     def clear_auras(self) -> None:
@@ -5243,6 +5244,7 @@ class BattleUI:
         ground.add_hook(EventType.LEAVE, self._on_leave_fx)
         ground.add_hook(EventType.SHUFFLE, self._on_shuffle_event)
         ground.add_hook(EventType.MOVE, self._on_move_event)
+        ground.add_hook(EventType.RETREAT, self._on_move_event)
         ground.add_hook(EventType.ADD_TO_DECK, self._on_add_deck_event)
         ground.add_hook(EventType.DAMAGED, self._on_damaged_event)
         ground.add_hook(EventType.CHOICE_RESOLVED, self._on_choice_resolved)
