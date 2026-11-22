@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """双方洗回手牌并抽取同等数量"""
@@ -36,7 +36,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for player in (Player.A, Player.B):
         for _ in range(maximum):
             ground.draw(player, card)
-    start_forecast(ground, event.player, card, "storm")
+    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """所有单位 +3 攻击力, 压制未攻击的友方单位"""
@@ -33,7 +33,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         unit.add_temporary_at(3)
         if unit.controller is player and unit.attacks_turn == 0:
             ground.suppress(unit)
-    start_forecast(ground, player, card, "sunny")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

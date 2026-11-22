@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """所有陆军 +2 攻击力, 空军 +3 攻击力, 直到回合结束"""
@@ -32,7 +32,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
             continue
         amount = 2 if unit.type in (CardType.INFANTRY, CardType.TANK, CardType.ARTILLERY) else 3
         unit.add_temporary_at(amount)
-    start_forecast(ground, player, card, "sunny")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

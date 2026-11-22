@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """抽 3 张牌, 对友方总部造成手牌数伤害"""
@@ -35,7 +35,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         card,
         DamageType.NONE,
     )
-    start_forecast(ground, player, card, "storm")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

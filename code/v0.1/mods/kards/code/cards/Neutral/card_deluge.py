@@ -23,7 +23,7 @@ from main import (
 import random
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """6 点防御力随机分配给友方目标"""
@@ -37,7 +37,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         if not targets:
             break
         ground.buff(random.choice(targets), df=1)
-    start_forecast(ground, player, card, "rain")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

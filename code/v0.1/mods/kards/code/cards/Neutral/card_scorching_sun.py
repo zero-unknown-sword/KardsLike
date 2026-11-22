@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """将手中所有单位加入战场并压制"""
@@ -31,7 +31,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for unit in units:
         if ground.add_unit(player, unit):
             ground.suppress(unit)
-    start_forecast(ground, player, card, "sunny")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

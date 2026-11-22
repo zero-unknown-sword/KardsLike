@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """双方移除手中或场上花费最高的 2 张卡"""
@@ -36,7 +36,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
                 ground.discard_card(player, target)
             elif target.is_unit and target.zone is Zone.BOARD:
                 ground.remove_unit(target, card)
-    start_forecast(ground, event.player, card, "rain")
+    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

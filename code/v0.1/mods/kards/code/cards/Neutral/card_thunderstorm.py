@@ -23,7 +23,7 @@ from main import (
 import random
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """3 点伤害随机分配给敌方目标"""
@@ -37,7 +37,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         return
     for _ in range(3):
         ground.damage(random.choice(targets), 1, card, DamageType.NONE)
-    start_forecast(ground, player, card, "storm")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

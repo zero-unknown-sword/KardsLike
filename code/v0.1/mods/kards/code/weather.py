@@ -1,4 +1,6 @@
 """天气与预报的通用逻辑"""
+import random
+
 from main import BattleGround, Card, Event, EventType, Player, Zone, cards
 
 CLIMATE_IDS: dict[str, str] = {
@@ -8,24 +10,18 @@ CLIMATE_IDS: dict[str, str] = {
 }
 """三种基础气象对应的卡牌 id"""
 
-WEATHER_IDS: dict[str, list[str]] = {
-    "sunny": [
-        "kards:card_heatwave",
-        "kards:card_jungle_fever",
-        "kards:card_scorching_sun",
-    ],
-    "rain": [
-        "kards:card_deluge",
-        "kards:card_torrential_rain",
-        "kards:card_monsoon_rain",
-    ],
-    "storm": [
-        "kards:card_thunderstorm",
-        "kards:card_tropical_storm",
-        "kards:card_cyclone",
-    ],
-}
-"""三种气象分别对应的 2K / 4K / 6K 天气卡"""
+WEATHER_POOL: list[str] = [
+    "kards:card_heatwave",
+    "kards:card_jungle_fever",
+    "kards:card_scorching_sun",
+    "kards:card_deluge",
+    "kards:card_torrential_rain",
+    "kards:card_monsoon_rain",
+    "kards:card_thunderstorm",
+    "kards:card_tropical_storm",
+    "kards:card_cyclone",
+]
+"""全部天气卡"""
 
 
 def start_climate_choice(
@@ -77,26 +73,22 @@ def start_forecast(
     ground: BattleGround,
     player: Player,
     source: Card,
-    kind: str,
 ) -> bool:
     """
-    气象触发后, 选择一张 2K / 4K / 6K 天气, 下个友方回合加入手牌
+    随机发三张天气, 选择一张, 下个友方回合开始加入手牌
 
     Args:
         ground: 战斗全局参数
         player: 玩家
         source: 气象来源
-        kind: sunny / rain / storm
 
     Returns:
         是否成功开始选择
     """
-    ids = WEATHER_IDS.get(kind)
-    if not ids:
-        return False
     ground.emit(Event(EventType.FORECAST, player=player, source=source))
+    chosen_ids = random.sample(WEATHER_POOL, 3)
     choices: list[Card] = []
-    for card_id in ids:
+    for card_id in chosen_ids:
         card = cards.create(card_id)
         card.owner = player
         card.controller = player

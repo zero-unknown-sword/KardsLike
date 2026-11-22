@@ -22,7 +22,7 @@ from main import (
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import set_weather, start_forecast
+from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """友方步兵和总部 +3 防御力, 其他友方单位 +2 防御力"""
@@ -32,7 +32,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         if not unit.is_unit or unit.controller is not player:
             continue
         ground.buff(unit, df=3 if unit.type is CardType.INFANTRY else 2)
-    start_forecast(ground, player, card, "rain")
+    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

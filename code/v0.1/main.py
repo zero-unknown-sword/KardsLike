@@ -2544,8 +2544,14 @@ class BattleGround:
         else:
             self.kredits[player].start_turn()
         self.turns_taken[player] += 1
+        active_timers: list[ShadowTimer] = []
         for timer in self.shadow_timers[player]:
             timer.remaining -= 1
+            if timer.remaining > 0:
+                active_timers.append(timer)
+                continue
+            timer.action()
+        self.shadow_timers[player] = active_timers
         special_source = self.special_source(player)
         self.draw(player, special_source)
         extra = self.pending_turn_draws[player]
@@ -2578,13 +2584,6 @@ class BattleGround:
         ):
             for unit in line.units:
                 unit.clear_temporary()
-        # 回合结束阶段最后结算影子总部计时器
-        ready = [timer for timer in self.shadow_timers[player] if timer.remaining <= 0]
-        self.shadow_timers[player] = [
-            timer for timer in self.shadow_timers[player] if timer.remaining > 0
-        ]
-        for timer in ready:
-            timer.action()
         self.turn_owner = self.turn_owner.opponent
         self.turn_count += 1
         self.begin_turn()
