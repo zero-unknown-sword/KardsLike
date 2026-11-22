@@ -83,7 +83,6 @@ def start_climate_choice(
     Returns:
         是否成功开始选择
     """
-    ground.emit(Event(EventType.FORECAST, player=player, source=source))
     choices: list[Card] = []
     for card_id in CLIMATE_IDS.values():
         card = cards.create(card_id)
