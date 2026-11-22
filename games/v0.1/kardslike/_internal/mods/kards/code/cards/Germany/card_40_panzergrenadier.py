@@ -20,6 +20,9 @@ from main import (
     Rarity,
 )
 
+from mods.kards.code.keywords.blitz import KEYWORD as BLITZ
+from mods.kards.code.keywords.bond import KEYWORD as BOND
+
 
 def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
     """
@@ -38,11 +41,11 @@ def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
 
 def deployed(card: Card, event: Event, ground: BattleGround) -> bool:
     """
-    部署时触发
+    部署时触发, 此时 ENTER 尚未广播
 
     Args:
         card: 自身
-        event: ENTER 事件
+        event: DEPLOY 事件
         ground: 战斗全局参数
 
     Returns:
@@ -57,7 +60,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
 
     Args:
         card: 自身
-        event: ENTER 事件
+        event: DEPLOY 事件
         ground: 战斗全局参数
     """
     if not any(target.is_unit for target in ground.all_targets()):
@@ -90,10 +93,11 @@ CARD_DATA = CardData(
     operation_cost=1,
     procedures=[
         Procedure(
-            EventType.ENTER,
+            EventType.DEPLOY,
             deployed,
             action,
             target_valid=target_valid,
         )
     ],
+    keywords=[BLITZ, BOND]
 )

@@ -48,7 +48,9 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def apply(target: Card) -> None:
         if target is not None:
             ground.suppress(target)
-            ground.draw(player, card)
+            # 手牌已满时不再抽牌, 避免爆牌
+            if len(ground.hands[player].cards) < ground.hands[player].MAX_CARDS:
+                ground.draw(player, card)
 
     ground.request_target(
         player,

@@ -511,6 +511,15 @@ class EventType(IntEnum):
         way: LeaveMethod
         source: 来源卡牌或 None
     """
+    DEPLOY = pygame.event.custom_type()
+    """
+    单位部署, 在 ENTER 之前触发
+
+    数据:
+        card: 部署的单位
+        player: 控制者
+        method: EntryMethod
+    """
     ENTER = pygame.event.custom_type()
     """
     单位进入场上, 包括部署与效果加入
@@ -934,8 +943,10 @@ class Card:
 
     @property
     def targeted(self) -> bool:
-        """是否需要指向目标, 由流程执行器判断"""
-        return any(procedure.target_valid is not None for procedure in self.procedures)
+        """指令是否需要在使用前指向目标"""
+        return self.type is CardType.ORDER and any(
+            procedure.target_valid is not None for procedure in self.procedures
+        )
 
     @property
     def target_valid(self) -> Callable[..., bool] | None:
@@ -1948,13 +1959,25 @@ class BattleGround:
         hands: 双方手牌
         hqs: 双方总部
         kredits: 双方指挥点
+        pending_turn_draws: 回合开始额外抽牌数
+        turns_taken: 双方已进行回合数
         discards: 双方弃牌堆
+        fatigue: 双方士气伤害次数
+        turn_start_countries: 回合开始时双方场上国家
+        notice: 当前界面提示文本
+        pending_enter_effects: 延迟结算的进入事件
+        pending_returns: 延迟返回手牌的单位与来源
+        pending_isolated: 被孤立等待返回的单位与返回回合玩家
+        pending_actions: 延迟执行的动作
+        hooks: 全局事件钩子
         targets: 当前正在结算的卡牌目标列表
+        pending_target: 等待玩家选择的指向目标
+        pending_selection: 等待玩家确认的手牌选取
+        pending_choice: 等待玩家确认的三选一
+        last_choice_result: 最近一次三选一结果
         act_rule: 行动判定钩子, 返回 None 时使用默认标签规则
         winner: 已分出胜负时的胜方
     """
-
-    """无来源伤害的来源标识"""
 
     def __init__(self, config: BattleConfig, deck_a: Deck, deck_b: Deck) -> None:
         """
@@ -1966,36 +1989,64 @@ class BattleGround:
             deck_b: 玩家 B 的卡组
         """
         self.config: BattleConfig = config
+        """战斗配置"""
         self.turn_count: int = 1
+        """当前回合序号, 从 1 开始"""
         self.first_player: Player = random.choice((Player.A, Player.B))
+        """先手玩家"""
         self.turn_owner: Player = Player.A
+        """当前回合所有者"""
         self.front_line: Line = Line(LineKind.FRONT)
+        """前线"""
         self.support_lines: dict[Player, Line] = {
             Player.A: Line(LineKind.SUPPORT, Player.A),
             Player.B: Line(LineKind.SUPPORT, Player.B),
         }
+        """双方支援阵线"""
         self.decks: dict[Player, Deck] = {Player.A: deck_a, Player.B: deck_b}
+        """双方卡组"""
         self.hands: dict[Player, Hand] = {Player.A: Hand(), Player.B: Hand()}
+        """双方手牌"""
         self.hqs: dict[Player, Card] = {Player.A: deck_a.hq, Player.B: deck_b.hq}
+        """双方总部"""
         self.kredits: dict[Player, Kredit] = {Player.A: Kredit(), Player.B: Kredit()}
+        """双方指挥点"""
         self.pending_turn_draws: dict[Player, int] = {Player.A: 0, Player.B: 0}
+        """回合开始额外抽牌数"""
         self.turns_taken: dict[Player, int] = {Player.A: 0, Player.B: 0}
+        """双方已进行回合数"""
         self.discards: dict[Player, list[Card]] = {Player.A: [], Player.B: []}
+        """双方弃牌堆"""
         self.fatigue: dict[Player, int] = {Player.A: 0, Player.B: 0}
+        """双方士气伤害次数"""
         self.turn_start_countries: dict[Player, set[Country]] = {Player.A: set(), Player.B: set()}
+        """回合开始时双方场上国家, 用于协力"""
         self.notice: str = ""
+        """当前界面提示文本"""
         self.pending_enter_effects: list[tuple[int, Card, Event]] = []
-        self.pending_returns: list[tuple[int, Card, Card | None]] = []
+        """延迟结算的进入事件"""
+        self.pending_returns: list[tuple[int, Card, Card]] = []
+        """延迟返回手牌的单位与来源"""
         self.pending_isolated: list[tuple[Card, Player]] = []
+        """被孤立等待返回的单位与返回回合玩家"""
         self.pending_actions: list[tuple[int, Callable[[], None]]] = []
+        """延迟执行的动作"""
         self.hooks: dict[int, list[Callable[[Event, "BattleGround"], None]]] = {}
+        """全局事件钩子"""
         self.targets: list[Card] = []
+        """当前正在结算的卡牌目标列表"""
         self.pending_target: PendingTarget | None = None
+        """等待玩家选择的指向目标"""
         self.pending_selection: SelectionRequest | None = None
+        """等待玩家确认的手牌选取"""
         self.pending_choice: CardChoice | None = None
+        """等待玩家确认的三选一"""
         self.last_choice_result: tuple[Card, list[Card]] | None = None
+        """最近一次三选一结果"""
         self.act_rule: Callable[[Card, str], bool | None] | None = None
+        """行动判定钩子, 返回 None 时使用默认标签规则"""
         self.winner: Player | None = None
+        """已分出胜负时的胜方"""
         deck_a.hq.line = self.support_lines[Player.A]
         deck_b.hq.line = self.support_lines[Player.B]
 
@@ -2242,7 +2293,12 @@ class BattleGround:
         """
         targets = target if isinstance(target, list) else [target]
         for item in list(targets):
-            event_source = source
+            # 指令造成的伤害以使用者 HQ 作为来源
+            event_source = (
+                self.hqs[source.controller]
+                if source.type is CardType.ORDER
+                else source
+            )
             if self.is_immune(item) and kind is not DamageType.MORALE:
                 continue
             actual = amount
@@ -2313,6 +2369,8 @@ class BattleGround:
             card: 被消灭的单位
             source: 伤害来源
         """
+        if source.type is CardType.ORDER:
+            source = self.hqs[source.controller]
         if card.line is not None:
             card.line.remove(card)
         player = card.controller
@@ -2379,7 +2437,7 @@ class BattleGround:
             if card.zone is Zone.BOARD and card.line is not None:
                 card.update(event, self)
         self.pending_enter_effects = remaining_enters
-        remaining_returns: list[tuple[int, Card, Card | None]] = []
+        remaining_returns: list[tuple[int, Card, Card]] = []
         for due, card, source in self.pending_returns:
             if now < due:
                 remaining_returns.append((due, card, source))
@@ -2701,26 +2759,42 @@ class BattleGround:
             deferred = card.has_tag(CardTag.SLAM_UP_2)
             self.emit(
                 Event(
-                    EventType.ENTER,
+                    EventType.DEPLOY,
                     card=card,
                     player=player,
                     method=EntryMethod.DEPLOY,
-                    deferred_card=card if deferred else None,
                 )
             )
-            if deferred:
-                effect_event = Event(
-                    EventType.ENTER,
-                    card=card,
-                    player=player,
-                    method=EntryMethod.DEPLOY,
-                )
-                self.pending_enter_effects.append(
-                    (pygame.time.get_ticks() + 800, card, effect_event)
-                )
+            enter_event = Event(
+                EventType.ENTER,
+                card=card,
+                player=player,
+                method=EntryMethod.DEPLOY,
+                deferred_card=card if deferred else None,
+            )
+
+            def finish_deploy() -> None:
+                if card.zone is not Zone.BOARD:
+                    return
+                self.emit(enter_event)
+                if deferred:
+                    effect_event = Event(
+                        EventType.ENTER,
+                        card=card,
+                        player=player,
+                        method=EntryMethod.DEPLOY,
+                    )
+                    self.pending_enter_effects.append(
+                        (pygame.time.get_ticks() + 800, card, effect_event)
+                    )
+
             self.apply_intel(player, card)
             if self.pending_target is not None:
+                # 部署效果先结算, 结算完成后再广播 ENTER
                 self.pending_target.cancel = lambda: self.cancel_deploy(player, card, card.cost)
+                self.pending_target.finish = finish_deploy
+            else:
+                finish_deploy()
             return True
         if card.type is CardType.ORDER:
             self.kredits[player].spend(card.cost)
@@ -3275,6 +3349,9 @@ class BattleGround:
         card.zone = Zone.HAND
         card.deployed_turn = -1
         card.remove_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
+        # 收回手牌时清除部署期间获得的光环和临时属性
+        card.clear_auras()
+        card.clear_temporary()
         self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
 
     def finish_order(self, player: Player, card: Card) -> None:
@@ -7540,6 +7617,9 @@ class BattleUI:
         """
         pending = ground.pending_target
         if pending is None:
+            return
+        # 单位部署后的选择不加箭头, 只保留目标高亮
+        if pending.source.is_unit:
             return
         record = self.frame_rects.get(id(pending.source))
         if record is not None:

@@ -1,4 +1,4 @@
-"""溃军"""
+﻿"""溃军"""
 
 import sys
 from pathlib import Path
@@ -17,6 +17,7 @@ CARD_DATA = CardData(
     cost=1,
     display_name="溃军",
     text="",
+    art="routed_troops.png",
     rare=Rarity.STANDARD,
     at=1,
     df=1,
