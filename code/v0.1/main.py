@@ -4423,6 +4423,7 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_yokosuka_e14y",
     "kards:card_75th_rifle_regiment",
     "kards:card_kawanishi_h8k",
+    "kards:card_44th_silesia",
 ]
 
 

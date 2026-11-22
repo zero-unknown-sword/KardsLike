@@ -8,5 +8,8 @@ if str(_ROOT) not in sys.path:
 
 import main
 
-main.DEFAULT_DECK_POOL[:] = ["kards:card_forecast"] * 39
+main.DEFAULT_DECK_POOL[:] = (
+    ["kards:card_forecast"] * 36
+    + ["kards:card_44th_silesia"] * 3
+)
 main.main()
