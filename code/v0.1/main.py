@@ -2891,7 +2891,2958 @@ class BattleGround:
             return True
         if card.type is CardType.ORDER:
             self.kredits[player].spend(effective_cost)
-            if card.inhibited:
+            if card.has_keyword("weather"):
+                self.weather_used_turn[player] = self.turn_count
+            self.check_bond(player, card)
+            self.apply_intel(player, card)
+            self.targets = self.all_targets()
+            use_event = Event(
+                EventType.USE,
+                card=card,
+                source=card,
+                player=player,
+                targets=list(self.targets),
+            )
+            # 指令先离开手牌再结算, 抽牌时手牌已腾出位置
+            if card in self.hands[player].cards:
+                self.hands[player].remove(card)
+            self.emit(use_event, extra_cards=[card])
+            if self.pending_target is not None:
+                self.pending_target.cancel = lambda: self.cancel_order(player, card, effective_cost)
+                self.pending_target.finish = lambda: self.finish_order(player, card)
+                return True
+            self.hands[player].remove(card)
+            self.discards[player].append(card)
+            card.zone = Zone.DISCARD
+            if not card.procedures:
+                if card.effect is not None:
+                    card.effect(self, player)
+                elif card.heal_self:
+                    self.hqs[player].df += card.cost
+                else:
+                    self.damage(self.hqs[player.opponent], card.cost, card, DamageType.NONE)
+            self.check_victory()
+            return True
+        return False
+
+    def add_unit(
+        self,
+        player: Player,
+        card: Card,
+        index: int | None = None,
+        line: Line | None = None,
+    ) -> bool:
+        """
+        把一张单位直接加入场上, 用于效果召唤而与普通部署区分
+
+        默认加入己方支援阵线最右侧
+        传入前线时, 若前线被敌方占领则直接失败, 不会退回支援阵线
+        TODO: 守护等关键词对加入位置的特殊规则
+
+        Args:
+            player: 控制者
+            card: 单位
+            index: 卡位位置, 缺省为最右侧
+            line: 目标战线, 缺省为支援阵线
+
+        Returns:
+            是否加入成功
+        """
+        target = line if line is not None else self.support_lines[player]
+        if not card.is_unit:
+            return False
+        if target.kind is LineKind.FRONT and target.owner not in (None, player):
+            return False
+        if len(target.units) >= target.capacity:
+            return False
+        for holder in (self.hands[player].cards, self.decks[player].cards, self.discards[player]):
+            if card in holder:
+                holder.remove(card)
+        card.owner = player
+        card.controller = player
+        card.reset_state()
+        card.revealed = False
+        card.deployed_turn = self.turn_count
+        target.add(card, index)
+        card.zone = Zone.BOARD
+        card.add_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
+        self.emit(Event(EventType.ENTER, card=card, player=player, method=EntryMethod.ADD))
+        return True
+
+    def request_target(
+        self,
+        player: Player,
+        source: Card,
+        valid: Callable[[Card], bool],
+        callback: Callable[[Card], None],
+        cancel: Callable[[], None] | None = None,
+    ) -> None:
+        """
+        进入指向状态, 等待玩家选择目标
+
+        Args:
+            player: 发起方
+            source: 指向的来源卡牌
+            valid: 目标合法性判断
+            callback: 选定目标后的执行器
+            cancel: 取消时的回调
+        """
+        self.pending_target = PendingTarget(player, source, valid, callback, cancel)
+
+    def resolve_target(self, target: Card) -> bool:
+        """
+        结算指向目标
+
+        Args:
+            target: 选中的目标
+
+        Returns:
+            是否结算成功
+        """
+        pending = self.pending_target
+        if pending is None or not pending.valid(target):
+            return False
+        self.pending_target = None
+        self.emit(
+            Event(
+                EventType.TARGETED,
+                target=target,
+                source=pending.source,
+                player=pending.player,
+            )
+        )
+        pending.callback(target)
+        if pending.finish is not None:
+            pending.finish()
+        return True
+
+    def cancel_target(self) -> None:
+        """取消当前指向, 并执行取消回调"""
+        pending = self.pending_target
+        self.pending_target = None
+        if pending is not None and pending.cancel is not None:
+            pending.cancel()
+
+    def suppress(self, card: Card) -> None:
+        """
+        压制一个单位, 直到其所有者下个回合结束
+
+        Args:
+            card: 单位
+        """
+        if card.zone is not Zone.BOARD:
+            return
+        owner = card.controller
+        card.suppressed = True
+        card.suppressed_turn = self.turns_taken[owner]
+
+    def start_card_choice(
+        self,
+        player: Player,
+        cards: list[Card],
+        source: Card,
+        destination: Zone = Zone.HAND,
+        develop: bool = False,
+        origin_deck: bool = False,
+        unselected_bottom: bool = False,
+        loot_event: bool = False,
+        title: str = "选择一张牌",
+        callback: Callable[[Card, list[Card]], None] | None = None,
+        next_turn: bool = False,
+    ) -> bool:
+        """
+        开始一次三选一
+
+        Args:
+            player: 选取方
+            cards: 候选卡牌, 超过三张时随机取三张
+            destination: 选中后的区域
+            develop: 是否触发 DEVELOP 事件
+            origin_deck: 候选牌是否来自卡组
+            unselected_bottom: 未选中的牌是否置于卡组底
+            loot_event: 是否触发 LOOT 事件
+            source: 来源卡牌
+            title: 界面标题
+            callback: 返回选中牌与未选中的两张牌
+
+        Returns:
+            是否成功开始
+        """
+        if self.pending_choice is not None or self.pending_selection is not None:
+            return False
+        if not cards:
+            return False
+        if len(cards) > 3:
+            cards = random.sample(cards, 3)
+        self.last_choice_result = None
+        self.pending_choice = CardChoice(
+            player,
+            cards,
+            source,
+            destination,
+            develop,
+            origin_deck,
+            unselected_bottom,
+            loot_event,
+            title,
+            callback,
+            next_turn,
+        )
+        if self.kind_of(player) is PlayerKind.AI or player is Player.B:
+            self.resolve_random_choice()
+        return True
+
+    def shadow_hq(self, player: Player) -> Card:
+        """
+        返回玩家的影子总部, 不存在时创建
+
+        Args:
+            player: 玩家
+
+        Returns:
+            影子总部
+        """
+        hq = self.shadow_hqs[player]
+        if hq is None:
+            hq = Card(
+                type=CardType.HQ,
+                cost=0,
+                name="shadow_hq",
+                country=Country.NEUTRAL,
+                at=0,
+                df=1,
+                display_name="影子总部",
+            )
+            hq.owner = player
+            hq.controller = player
+            hq.zone = Zone.REMOVED
+            self.shadow_hqs[player] = hq
+        return hq
+
+    def start_shadow_timer(
+        self,
+        player: Player,
+        action: Callable[[], None],
+        turns: int = 1,
+    ) -> None:
+        """
+        给影子总部添加计时器
+
+        Args:
+            player: 计时器所有者
+            action: 归零时执行的动作
+            turns: 初始回合数
+        """
+        self.shadow_hq(player)
+        self.shadow_timers[player].append(ShadowTimer(turns, action))
+
+    def _resolve_auto_target(self) -> None:
+        """自动使用卡牌时, 自动选择第一个合法目标"""
+        pending = self.pending_target
+        if pending is None:
+            return
+        target = next((item for item in self.targets if pending.valid(item)), None)
+        if target is None:
+            self.cancel_target()
+            return
+        self.resolve_target(target)
+
+    def auto_use_card(self, card: Card, player: Player) -> bool:
+        """
+        自动使用进入手牌的 PFWD 卡牌
+
+        Args:
+            card: 进入手牌的卡牌
+            player: 获得方
+
+        Returns:
+            是否自动使用
+        """
+        if card.zone is not Zone.HAND or not card.has_keyword("pfwd"):
+            return False
+        if card.has_keyword("weather") and self.weather_used_turn[player] == self.turn_count:
+            return False
+        card.owner = player
+        card.controller = player
+        if card.has_keyword("weather"):
+            self.weather_used_turn[player] = self.turn_count
+        if card.is_unit:
+            line = self.support_lines[player]
+            if len(line.units) >= line.capacity:
+                return False
+            self.hands[player].remove(card)
+            card.reset_state()
+            card.revealed = False
+            card.deployed_turn = self.turn_count
+            line.add(card)
+            card.zone = Zone.BOARD
+            card.add_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
+            self.targets = self.all_targets()
+            self.emit(Event(EventType.USE, card=card, source=card, player=player, targets=[]))
+            self.emit(
+                Event(
+                    EventType.DEPLOY,
+                    card=card,
+                    player=player,
+                    method=EntryMethod.DEPLOY,
+                )
+            )
+            self._resolve_auto_target()
+            if card.zone is Zone.BOARD:
+                self.emit(
+                    Event(
+                        EventType.ENTER,
+                        card=card,
+                        player=player,
+                        method=EntryMethod.DEPLOY,
+                    )
+                )
+            return True
+        # 指令: 忽略费用和回合限制, 直接触发效果
+        card.zone = Zone.HAND
+        self.targets = self.all_targets()
+        self.emit(
+            Event(
+                EventType.USE,
+                card=card,
+                source=card,
+                player=player,
+                targets=list(self.targets),
+            )
+        )
+        self._resolve_auto_target()
+        if card in self.hands[player].cards:
+            self.hands[player].remove(card)
+        card.zone = Zone.DISCARD
+        if card not in self.discards[player]:
+            self.discards[player].append(card)
+        self.check_victory()
+        return True
+
+    def move_to_hand(self, card: Card, player: Player) -> bool:
+        """
+        将卡牌移入玩家手牌
+
+        Args:
+            card: 要移动的卡牌
+            player: 目标玩家
+
+        Returns:
+            是否成功进入手牌
+        """
+        for holder in (
+            self.hands[player].cards,
+            self.decks[player].cards,
+            self.discards[player],
+        ):
+            if card in holder:
+                holder.remove(card)
+        if card.line is not None:
+            card.line.remove(card)
+        card.owner = player
+        card.controller = player
+        card.zone = Zone.HAND
+        card.revealed = False
+        if self.hands[player].add(card):
+            self.auto_use_card(card, player)
+            return True
+        self.discard_card(player, card)
+        return False
+
+    def resolve_card_choice(self, card: Card) -> bool:
+        """
+        确认三选一
+
+        Args:
+            card: 选中的卡牌
+
+        Returns:
+            是否结算成功
+        """
+        choice = self.pending_choice
+        if choice is None or card not in choice.cards:
+            return False
+        self.pending_choice = None
+        if choice.next_turn:
+            # 预报选中的天气延迟到下个友方回合开始
+            for holder in (
+                self.hands[choice.player].cards,
+                self.decks[choice.player].cards,
+                self.discards[choice.player],
+            ):
+                if card in holder:
+                    holder.remove(card)
+            card.owner = choice.player
+            card.zone = Zone.REMOVED
+            card_id = card.card_id
+            owner = choice.player
+
+            def add_weather() -> None:
+                self.give_card(owner, card_id, Zone.HAND, revealed=False)
+
+            self.start_shadow_timer(owner, add_weather)
+        elif choice.destination is Zone.HAND:
+            self.move_to_hand(card, choice.player)
+        else:
+            for holder in (
+                self.hands[choice.player].cards,
+                self.decks[choice.player].cards,
+                self.discards[choice.player],
+            ):
+                if card in holder:
+                    holder.remove(card)
+            card.owner = choice.player
+            if choice.destination is Zone.DECK:
+                self.decks[choice.player].cards.insert(
+                    random.randint(0, len(self.decks[choice.player].cards)),
+                    card,
+                )
+                card.zone = Zone.DECK
+                card.revealed = False
+            elif choice.destination is Zone.BOARD:
+                self.add_unit(choice.player, card)
+        for other in choice.cards:
+            if other is card:
+                continue
+            if choice.origin_deck:
+                if choice.unselected_bottom:
+                    self.decks[choice.player].cards.insert(0, other)
+                else:
+                    self.decks[choice.player].cards.insert(
+                        random.randint(0, len(self.decks[choice.player].cards)),
+                        other,
+                    )
+                other.zone = Zone.DECK
+                other.revealed = False
+            else:
+                self.discards[choice.player].append(other)
+                other.zone = Zone.DISCARD
+        if choice.origin_deck and not choice.unselected_bottom:
+            self.shuffle_deck(choice.player)
+        remaining = [other for other in choice.cards if other is not card]
+        self.last_choice_result = (card, remaining)
+        if choice.develop:
+            self.emit(
+                Event(
+                    EventType.DEVELOP,
+                    card=card,
+                    player=choice.player,
+                    source=choice.source,
+                )
+            )
+        if choice.loot_event:
+            self.emit(
+                Event(
+                    EventType.LOOT,
+                    card=card,
+                    player=choice.player,
+                    source=choice.source,
+                )
+            )
+        if choice.callback is not None:
+            choice.callback(card, remaining)
+        self.emit(
+            Event(EventType.CHOICE_RESOLVED, card=card, player=choice.player, source=choice.source)
+        )
+        return True
+
+    def resolve_random_choice(self) -> bool:
+        """随机确认当前三选一"""
+        choice = self.pending_choice
+        if choice is None or not choice.cards:
+            return False
+        return self.resolve_card_choice(random.choice(choice.cards))
+
+    def develop_from_deck(self, player: Player, source: Card) -> bool:
+        """
+        从卡组随机展示三张牌, 选择一张加入手牌
+
+        Args:
+            player: 玩家
+            source: 开发来源
+
+        Returns:
+            是否成功开始
+        """
+        deck_cards = self.decks[player].cards
+        if not deck_cards:
+            return False
+        targets = random.sample(deck_cards, min(3, len(deck_cards)))
+        for card in targets:
+            deck_cards.remove(card)
+        return self.start_card_choice(
+            player,
+            targets,
+            source,
+            destination=Zone.HAND,
+            develop=True,
+            origin_deck=True,
+            title="开发",
+        )
+
+    def develop_from_pool(self, player: Player, source: Card) -> bool:
+        """
+        从当前卡组中随机展示三张牌, 选择一张加入手牌
+
+        开发不会移除卡组中的牌:
+        它只读取卡组里存在的卡牌 id, 生成额外的卡牌实例作为选项。
+        因此开发池不会出现玩家卡组以外的卡牌。
+
+        Args:
+            player: 玩家
+            source: 开发来源
+
+        Returns:
+            是否成功开始
+        """
+        deck_ids = {
+            card.card_id
+            for card in self.decks[player].cards
+            if card.card_id
+        }
+        candidates: list[str] = []
+        for card_id in deck_ids:
+            data = cards.get(card_id)
+            if data is None:
+                continue
+            if CardTag.NOT_IN_START in data.tags:
+                continue
+            if data.type is CardType.HQ:
+                continue
+            candidates.append(card_id)
+        if not candidates:
+            return False
+        chosen_ids = random.sample(candidates, min(3, len(candidates)))
+        # 构筑外副本: 不修改原卡组, 选项是独立卡牌实例
+        choices = [cards.create(card_id) for card_id in chosen_ids]
+        for card in choices:
+            card.owner = player
+            card.controller = player
+            card.zone = Zone.DECK
+        return self.start_card_choice(
+            player,
+            choices,
+            source,
+            destination=Zone.HAND,
+            develop=True,
+            origin_deck=False,
+            title="开发",
+        )
+
+    def loot_from_deck(self, player: Player, source: Card) -> bool:
+        """
+        从卡组顶三张牌中选择一张加入手牌
+
+        Args:
+            player: 玩家
+            source: 来源
+
+        Returns:
+            是否成功开始
+        """
+        deck_cards = self.decks[player].cards
+        if not deck_cards:
+            return False
+        targets = list(deck_cards[-3:])
+        for card in targets:
+            deck_cards.remove(card)
+        return self.start_card_choice(
+            player,
+            targets,
+            source,
+            destination=Zone.HAND,
+            origin_deck=True,
+            unselected_bottom=True,
+            loot_event=True,
+            title="战利品",
+        )
+
+    def start_selection(
+        self,
+        player: Player,
+        min_count: int,
+        max_count: int,
+        callback: Callable[[list[Card]], None],
+        filter: Callable[[Card], bool] | None = None,
+        title: str = "",
+    ) -> bool:
+        """
+        开始一次手牌选取
+
+        Args:
+            player: 发起方
+            min_count: 最少选取数量
+            max_count: 最多选取数量
+            callback: 确认后的回调
+            filter: 可选筛选器
+            title: 提示文本
+
+        Returns:
+            是否成功开始
+        """
+        if self.pending_selection is not None:
+            return False
+        if self.pending_choice is not None:
+            return False
+        if min_count < 0 or max_count < min_count:
+            return False
+        available = [
+            card
+            for card in self.hands[player].cards
+            if filter is None or filter(card)
+        ]
+        if len(available) < min_count:
+            return False
+        self.pending_selection = SelectionRequest(
+            player,
+            min_count,
+            max_count,
+            callback,
+            filter,
+            title,
+        )
+        return True
+
+    def resolve_selection(self, cards: list[Card]) -> bool:
+        """
+        确认当前手牌选取
+            Args:
+            cards: 选中的手牌
+
+        Returns:
+            是否结算成功
+        """
+        request = self.pending_selection
+        if request is None:
+            return False
+        if not (request.min_count <= len(cards) <= request.max_count):
+            return False
+        for card in cards:
+            if card not in self.hands[request.player].cards:
+                return False
+            if request.filter is not None and not request.filter(card):
+                return False
+        self.pending_selection = None
+        request.callback(list(cards))
+        return True
+
+    def cancel_selection(self) -> None:
+        """取消当前手牌选取"""
+        self.pending_selection = None
+
+    def start_mulligan(self, player: Player) -> bool:
+        """
+        开始开局重新调度: 选取 0~5 张手牌洗回卡组并抽等量牌
+
+        Args:
+            player: 玩家
+
+        Returns:
+            是否成功开始
+        """
+        max_count = min(5, len(self.hands[player].cards))
+        if max_count <= 0:
+            return False
+        return self.start_selection(
+            player,
+            0,
+            max_count,
+            lambda cards: self._apply_mulligan(player, cards),
+            title="重新调度",
+        )
+
+    def _apply_mulligan(self, player: Player, cards: list[Card]) -> None:
+        """
+        将选取的手牌洗回卡组并抽取等量卡牌
+
+        Args:
+            player: 玩家
+            cards: 选中的手牌
+        """
+        for card in cards:
+            if card in self.hands[player].cards:
+                self.hands[player].remove(card)
+            self.decks[player].cards.insert(
+                random.randint(0, len(self.decks[player].cards)),
+                card,
+            )
+            card.zone = Zone.DECK
+            card.revealed = False
+            self.emit(
+                Event(
+                    EventType.ADD_TO_DECK,
+                    card=card,
+                    player=player,
+                    index=len(self.decks[player].cards) - 1,
+                )
+            )
+        if cards:
+            count = len(cards)
+            self.schedule_action(560, lambda: self.shuffle_deck(player))
+
+            special_source = self.special_source(player)
+
+            def draw_replacement() -> None:
+                for _ in range(count):
+                    self.draw(player, special_source)
+
+            self.schedule_action(1200, draw_replacement)
+
+    def cancel_deploy(self, player: Player, card: Card, cost: int) -> None:
+        """
+        取消一次部署, 把单位收回手牌并退还费用
+
+        Args:
+            player: 部署方
+            card: 被部署的单位
+            cost: 部署花费
+        """
+        if card.line is not None:
+            card.line.remove(card)
+        self.hands[player].add(card)
+        card.zone = Zone.HAND
+        card.deployed_turn = -1
+        card.remove_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
+        # 收回手牌时清除部署期间获得的光环和临时属性
+        card.clear_auras()
+        card.clear_temporary()
+        self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
+
+    def finish_order(self, player: Player, card: Card) -> None:
+        """
+        指向型指令结算完成, 从手牌进入弃牌堆
+
+        Args:
+            player: 使用方
+            card: 指令
+        """
+        if card in self.hands[player].cards:
+            self.hands[player].remove(card)
+        self.discards[player].append(card)
+        card.zone = Zone.DISCARD
+        self.check_victory()
+
+    def cancel_order(self, player: Player, card: Card, cost: int) -> None:
+        """
+        取消一次指向型指令, 保留在手牌并退还费用
+
+        Args:
+            player: 使用方
+            card: 被取消的指令
+            cost: 指令花费
+        """
+        if card in self.discards[player]:
+            self.discards[player].remove(card)
+        if card not in self.hands[player].cards:
+            self.hands[player].add(card)
+        card.zone = Zone.HAND
+        self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
+
+    def remove_unit(self, card: Card, source: Card) -> None:
+        """
+        将单位从战场移除(非消灭), 进入移除区
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        player = card.controller
+        line = card.line
+        if line is not None:
+            line.remove(card)
+            if line.kind is LineKind.FRONT and not line.units:
+                line.owner = None
+        card.zone = Zone.REMOVED
+        self.emit(
+            Event(
+                EventType.LEAVE,
+                card=card,
+                player=player,
+                way=LeaveMethod.REMOVED,
+                source=source,
+            )
+        )
+
+    def discard_card(self, player: Player, card: Card) -> None:
+        """
+        弃掉一张卡牌, 进入弃牌堆并发 DISCARD 事件
+
+        Args:
+            player: 所属玩家
+            card: 被弃掉的卡牌
+        """
+        if card in self.hands[player].cards:
+            self.hands[player].remove(card)
+        if card not in self.discards[player]:
+            self.discards[player].append(card)
+        card.zone = Zone.DISCARD
+        self.emit(Event(EventType.DISCARD, card=card, player=player))
+
+    def units_in_effect_order(self, player: Player) -> list[Card]:
+        """
+        按效果结算顺序返回场上单位: 敌方支援阵线 -> 前线 -> 友方支援阵线
+        每条阵线内从右到左
+
+        Args:
+            player: 效果发起方
+
+        Returns:
+            单位列表
+        """
+        result: list[Card] = []
+        for line in (
+            self.support_lines[player.opponent],
+            self.front_line,
+            self.support_lines[player],
+        ):
+            result.extend(reversed(line.units))
+        return result
+
+    def inhibit_unit(self, card: Card, source: Card) -> None:
+        """
+        抑制单位: 移除全部效果和关键词, 重置攻击力/最大防御力/行动花费
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        card.inhibited = True
+        card.keywords.clear()
+        card.aura_keywords.clear()
+        card.procedures.clear()
+        card.at = card.initial_at
+        card.max_df = card.initial_df
+        card.df = min(card.df, card.max_df)
+        card.operation_cost = card.initial_operation_cost
+        card.clear_auras()
+
+    def retreat_unit(self, card: Card, source: Card) -> None:
+        """
+        撤退单位: 前线单位返回支援阵线, 已在支援阵线或支援阵线已满时返回手牌
+
+        撤退不计入行动或移动
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        if not card.is_unit or card.zone is not Zone.BOARD:
+            return
+        player = card.controller
+        line = card.line
+        if line is not None and line.kind is LineKind.FRONT:
+            support = self.support_lines[player]
+            if len(support.units) < support.capacity:
+                line.remove(card)
+                support.add(card)
+                card.zone = Zone.BOARD
+                self.emit(
+                    Event(
+                        EventType.RETREAT,
+                        card=card,
+                        player=player,
+                        source=source,
+                    )
+                )
+                return
+        self.return_unit(card, source)
+
+    def return_unit(self, card: Card, source: Card) -> None:
+        """
+        将单位返回所有者手中, 并重置为初始状态
+
+        手牌已满时改为弃掉该单位
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        player = card.controller
+        line = card.line
+        if line is not None:
+            line.remove(card)
+            if line.kind is LineKind.FRONT and not line.units:
+                line.owner = None
+        card.reset_state(clear_modifiers=True)
+        card.revealed = True
+        if self.hands[player].add(card):
+            card.zone = Zone.HAND
+        else:
+            self.discard_card(player, card)
+        self.emit(
+            Event(
+                EventType.LEAVE,
+                card=card,
+                player=player,
+                way=LeaveMethod.RETURN_HAND,
+                source=source,
+            )
+        )
+
+    def shuffle_deck(self, player: Player) -> None:
+        """
+        随机打乱玩家卡组并发出洗切事件
+
+        Args:
+            player: 玩家
+        """
+        random.shuffle(self.decks[player].cards)
+        self.emit(Event(EventType.SHUFFLE, player=player))
+
+    def add_to_deck_and_shuffle(self, player: Player, card_id: str) -> Card | None:
+        """
+        将一张卡加入卡组后洗切
+
+        Args:
+            player: 玩家
+            card_id: 卡牌 id
+
+        Returns:
+            加入的卡牌, 失败时为 None
+        """
+        card = self.give_card(player, card_id, Zone.DECK)
+        if card is not None:
+            self.shuffle_deck(player)
+        return card
+
+    def put_card_into_deck(self, player: Player, card: Card) -> None:
+        """
+        将一张手牌洗入卡组并洗切
+
+        Args:
+            player: 玩家
+            card: 卡牌
+        """
+        if card in self.hands[player].cards:
+            self.hands[player].remove(card)
+        card.reset_state(clear_modifiers=True)
+        card.revealed = False
+        deck_cards = self.decks[player].cards
+        position = random.randint(0, len(deck_cards))
+        deck_cards.insert(position, card)
+        card.zone = Zone.DECK
+        self.emit(Event(EventType.ADD_TO_DECK, card=card, player=player, index=position))
+        self.schedule_action(560, lambda: self.shuffle_deck(player))
+
+    def isolate_card(
+        self,
+        player: Player,
+        card: Card,
+        source: Card,
+    ) -> bool:
+        """
+        移除一个单位, 并在该玩家下个回合开始时返回
+
+        Args:
+            player: 使用孤立的一方
+            card: 被移除的单位
+            source: 效果来源
+
+        Returns:
+            是否成功移除
+        """
+        if card.zone is not Zone.BOARD or not card.is_unit:
+            return False
+        if card.line is not None:
+            card.line.remove(card)
+        card.zone = Zone.REMOVED
+        self.pending_isolated.append((card, player))
+        self.emit(
+            Event(
+                EventType.LEAVE,
+                card=card,
+                player=player,
+                way=LeaveMethod.REMOVED,
+                source=source,
+            )
+        )
+        return True
+
+    def schedule_return(self, card: Card, source: Card, delay_ms: int) -> None:
+        """
+        延迟将单位返回手牌, 用于逐个结算
+
+        Args:
+            card: 单位
+            source: 效果来源
+            delay_ms: 延迟毫秒数
+        """
+        self.pending_returns.append((pygame.time.get_ticks() + delay_ms, card, source))
+
+    @property
+    def add_deck_delay(self) -> int:
+        """加入卡组动画延迟, 毫秒"""
+        return (
+            Global.save_data.add_deck_delay
+            if Global.save_data is not None
+            else DEFAULT_ADD_DECK_DELAY
+        )
+
+    def schedule_action(self, delay_ms: int, action: Callable[[], None]) -> None:
+        """
+        延迟执行一个动作
+
+        Args:
+            delay_ms: 延迟毫秒数
+            action: 要执行的动作
+        """
+        self.pending_actions.append((pygame.time.get_ticks() + delay_ms, action))
+
+    def give_card(
+        self,
+        player: Player,
+        card_id: str,
+        zone: Zone,
+        index: int | None = None,
+        line: Line | None = None,
+        revealed: bool = True,
+    ) -> Card | None:
+        """
+        将一张指定卡牌加入指定区域
+
+        加入的卡牌默认带 NOT_IN_START 标签
+        BOARD 默认从支援阵线最右侧加入, 可以指定前线
+
+        Args:
+            player: 获得方
+            card_id: 卡牌 id
+            zone: 目标区域, 支持 HAND/DECK/BOARD
+            index: 卡组或战线中的插入位置, 卡组缺省为随机位置
+            line: 加入场上时的目标战线, 缺省为支援阵线
+            revealed: 加入手牌时是否为明牌
+
+        Returns:
+            加入的卡牌, 失败时为 None
+        """
+        if not cards.has(card_id):
+            logger.warning("给牌失败, 未注册的卡牌: %s", card_id)
+            return None
+        card = cards.create(card_id)
+        card.owner = player
+        card.revealed = revealed if zone is Zone.HAND else False
+        card.add_tag(CardTag.NOT_IN_START)
+        if zone is Zone.HAND:
+            if not self.hands[player].add(card):
+                self.discards[player].append(card)
+                card.zone = Zone.DISCARD
+                self.emit(Event(EventType.ADD_TO_HAND, card=card, player=player))
+                return card
+            card.zone = Zone.HAND
+            self.emit(Event(EventType.ADD_TO_HAND, card=card, player=player))
+            self.auto_use_card(card, player)
+            return card
+        if zone is Zone.DECK:
+            deck_cards = self.decks[player].cards
+            position = random.randint(0, len(deck_cards)) if index is None else max(0, min(index, len(deck_cards)))
+            deck_cards.insert(position, card)
+            card.zone = Zone.DECK
+            self.emit(Event(EventType.ADD_TO_DECK, card=card, player=player, index=position))
+            return card
+        if zone is Zone.BOARD:
+            if not self.add_unit(player, card, index, line):
+                return None
+            self.emit(Event(EventType.ADD_TO_BOARD, card=card, player=player))
+            return card
+        logger.warning("给牌失败, 不支持的区域: %s", zone)
+        return None
+
+    def move_unit(self, player: Player, card: Card, line: Line, index: int | None = None) -> bool:
+        """
+        移动单位到目标战线
+
+        Args:
+            player: 操作者
+            card: 单位
+            line: 目标战线
+            index: 目标位置
+
+        Returns:
+            是否移动成功
+        """
+        if player is not self.turn_owner:
+            return False
+        if card.controller is not player or not self.can_move_now(card):
+            return False
+        if not self.kredits[player].can_afford(card.operation_cost):
+            return False
+        if not card.move(line, index):
+            return False
+        self.kredits[player].spend(card.operation_cost)
+        card.moved_turn = self.turn_count
+        card.add_tag(CardTag.MOVED)
+        self.emit(Event(EventType.MOVE, card=card, player=player, line=line))
+        return True
+
+    def attack_unit(self, player: Player, card: Card, target: Card) -> bool:
+        """
+        单位攻击目标, 结算反击
+
+        Args:
+            player: 攻击方
+            card: 攻击单位
+            target: 目标单位或总部
+
+        Returns:
+            是否攻击成功
+        """
+        if player is not self.turn_owner:
+            return False
+        if card.controller is not player or not self.can_attack_now(card):
+            return False
+        if not self.can_attack(player, card, target):
+            return False
+        if not self.kredits[player].can_afford(card.operation_cost):
+            return False
+        self.kredits[player].spend(card.operation_cost)
+        card.attacked_turn = self.turn_count
+        card.attacks_turn += 1
+        card.add_tag(CardTag.ATTACKED)
+        kind = DamageType.HQ_ATTACK if target.is_hq else DamageType.ATTACK
+        target_unit = target.is_unit
+        counter_at = target.at
+        counter = target_unit and self.counter_damage(card, target)
+        ambush_immune = False
+        if (
+            counter
+            and target.has_keyword("ambush")
+            and target.ambush_used_turn != self.turn_count
+        ):
+            target.ambush_used_turn = self.turn_count
+            counter_damage = max(0, counter_at - min(max(card.armor, 0), 3))
+            if counter_damage >= card.df:
+                ambush_immune = True
+        self.emit(Event(EventType.ATTACK, card=card, target=target, player=player))
+        if not ambush_immune:
+            self.damage(target, card.at, card, kind)
+        if (
+            target.zone is Zone.DISCARD
+            and card.has_tag(CardTag.OVERFLOW_DAMAGE)
+        ):
+            overflow = target.overflow_damage
+            if overflow > 0:
+                self.damage(self.hqs[player.opponent], overflow, card, DamageType.NONE)
+        if counter:
+            self.damage(card, counter_at, target, DamageType.COUNTER)
+        if (
+            target.zone is Zone.DISCARD
+            and card.zone is Zone.BOARD
+            and card.has_tag(CardTag.REFRESH_ON_KILL)
+        ):
+            card.attacks_turn = 0
+            card.remove_tag(CardTag.ATTACKED)
+            card.remove_tag(CardTag.MOVED)
+            card.attacked_turn = -1
+            card.moved_turn = -1
+        return True
+
+    def counter_damage(self, attacker: Card, defender: Card) -> bool:
+        """
+        判断本次交战是否会触发反击
+
+        炮兵不会受到反击伤害; 轰炸机不会造成反击伤害
+        轰炸机作为攻击方时只会受到战斗机造成的反击伤害
+
+        Args:
+            attacker: 攻击方
+            defender: 防御方
+
+        Returns:
+            是否触发反击
+        """
+        if attacker.has_keyword("shock"):
+            return False
+        if defender.type is CardType.BOMBER:
+            return False
+        if attacker.type is CardType.ARTILLERY:
+            return False
+        if attacker.type is CardType.BOMBER:
+            return defender.type is CardType.FIGHTER
+        return True
+
+    def check_victory(self) -> Player | None:
+        """
+        检查胜负, 双方同时归零则回合所有者失败
+
+        Returns:
+            胜方, 未分出胜负时为 None
+        """
+        if self.winner is not None:
+            return self.winner
+        a_dead = self.hqs[Player.A].df <= 0
+        b_dead = self.hqs[Player.B].df <= 0
+        if a_dead and b_dead:
+            self.winner = self.turn_owner.opponent
+        elif a_dead:
+            self.winner = Player.B
+        elif b_dead:
+            self.winner = Player.A
+        return self.winner
+
+# ==================== Mod 加载 ====================
+
+
+def _load_module(module_name: str, path: Path) -> Any:
+    """
+    按包路径加载模块, 失败时退回按文件路径加载
+
+    Args:
+        module_name: 模块名, 例如 mods.kards.cards.xxx
+        path: 文件路径
+
+    Returns:
+        加载的模块, 失败时返回 None
+    """
+    import importlib
+    import importlib.util
+    sys.modules.setdefault("main", sys.modules[__name__])
+    package_root = str(Path(__file__).resolve().parent)
+    if package_root not in sys.path:
+        sys.path.insert(0, package_root)
+    sys.modules.pop(module_name, None)
+    try:
+        return importlib.import_module(module_name)
+    except ImportError:
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+
+def _read_mod_info(mod_dir: Path, mod_id: str) -> ModInfo:
+    """
+    读取 mod 的 info.json 元信息
+
+    Args:
+        mod_dir: mod 目录
+        mod_id: mod 标识, 作为缺省显示名称
+
+    Returns:
+        mod 元信息, 缺失或无效时返回默认值
+    """
+    default: ModInfo = {
+        "name": mod_id,
+        "version": "",
+        "author": "",
+        "description": "",
+        "dependencies": [],
+    }
+    info_file = mod_dir / "info.json"
+    if not info_file.is_file():
+        return default
+    try:
+        parsed: object = json.loads(info_file.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        logger.warning(f"info.json 读取失败 {mod_id}: {exc}")
+        return default
+    if not isinstance(parsed, dict):
+        return default
+    raw = _string_dict(parsed)
+    dependencies_raw = raw.get("dependencies", [])
+    dependencies = [str(item) for item in _object_list(dependencies_raw)]
+    return {
+        "name": str(raw.get("name", mod_id)),
+        "version": str(raw.get("version", "")),
+        "author": str(raw.get("author", "")),
+        "description": str(raw.get("description", "")),
+        "dependencies": dependencies,
+    }
+
+
+def _resolve_load_order(dirs: dict[str, Path], infos: dict[str, ModInfo]) -> list[str]:
+    """
+    按依赖关系计算 mod 加载顺序
+
+    Args:
+        dirs: mod id 到目录的映射
+        infos: mod id 到元信息的映射
+
+    Returns:
+        可加载的 mod id 顺序
+    """
+    order: list[str] = []
+    done: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(mod_id: str, chain: list[str]) -> None:
+        if mod_id in done:
+            return
+        if mod_id in visiting:
+            logger.error("mod 依赖成环: %s", " -> ".join(chain + [mod_id]))
+            return
+        visiting.add(mod_id)
+        for dependency in infos[mod_id]["dependencies"]:
+            if dependency not in dirs:
+                logger.warning("mod %s 缺少依赖 %s, 已跳过", mod_id, dependency)
+                visiting.discard(mod_id)
+                return
+            visit(dependency, chain + [mod_id])
+            if dependency not in done:
+                logger.warning("mod %s 的依赖 %s 未加载, 已跳过", mod_id, dependency)
+                visiting.discard(mod_id)
+                return
+        visiting.discard(mod_id)
+        done.add(mod_id)
+        order.append(mod_id)
+
+    for mod_id in dirs:
+        visit(mod_id, [])
+    return order
+
+
+def _load_mod(mod_dir: Path, mod_id: str, info: ModInfo) -> None:
+    """
+    加载单个 mod 的关键词、中文数据与卡牌
+
+    Args:
+        mod_dir: mod 目录
+        mod_id: mod 标识
+        info: mod 元信息
+    """
+    cards.mods[mod_id] = info
+    code_dir = mod_dir / "code"
+    keywords_dir = code_dir / "keywords"
+    if keywords_dir.is_dir():
+        registry: object = None
+        init_file = keywords_dir / "__init__.py"
+        if init_file.is_file():
+            package = _load_module(f"mods.{mod_id}.code.keywords", init_file)
+            registry = getattr(package, "KEYWORDS", None)
+        if isinstance(registry, dict):
+            for keyword_id, keyword in _string_dict(registry).items():
+                if not isinstance(keyword, KeywordData):
+                    logger.warning(f"关键词注册表项无效: {keyword_id}")
+                    continue
+                keyword.keyword_id = keyword_id
+                cards.keywords[keyword_id] = keyword
+                cards.keyword_names[keyword_id] = keyword.name
+        else:
+            for kw_file in sorted(keywords_dir.glob("*.py")):
+                if kw_file.stem.startswith("_"):
+                    continue
+                kw_module = _load_module(f"mods.{mod_id}.code.keywords.{kw_file.stem}", kw_file)
+                keyword = getattr(kw_module, "KEYWORD", None)
+                if not isinstance(keyword, KeywordData):
+                    logger.warning(f"关键词文件缺少 KEYWORD: {kw_file.name}")
+                    continue
+                keyword.keyword_id = kw_file.stem
+                cards.keywords[keyword.keyword_id] = keyword
+                cards.keyword_names[keyword.keyword_id] = keyword.name
+    else:
+        legacy = code_dir / "keywords.py"
+        if legacy.is_file():
+            legacy_module = _load_module(f"mods.{mod_id}.code.keywords", legacy)
+            extra = getattr(legacy_module, "KEYWORDS", None)
+            if isinstance(extra, dict):
+                for key, value in _string_dict(extra).items():
+                    if isinstance(value, str):
+                        cards.keyword_names[key] = value
+    zh_file = mod_dir / "data" / "zh.json"
+    if zh_file.is_file():
+        try:
+            zh_data: object = json.loads(zh_file.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            logger.warning(f"zh.json 读取失败 {mod_id}: {exc}")
+        else:
+            if isinstance(zh_data, dict):
+                for key, value in _string_dict(zh_data).items():
+                    if isinstance(value, dict):
+                        cards.zh[key] = _string_dict(value)
+    cards_dir = code_dir / "cards"
+    if not cards_dir.is_dir():
+        return
+    for py_file in sorted(cards_dir.rglob("*.py")):
+        if py_file.stem.startswith("_"):
+            continue
+        module = _load_module(f"mods.{mod_id}.code.cards.{py_file.stem}", py_file)
+        card = getattr(module, "CARD_DATA", None)
+        if not isinstance(card, CardData):
+            logger.warning(f"卡牌文件缺少 CARD_DATA: {py_file.name}")
+            continue
+        card.name = py_file.stem
+        card.card_id = f"{mod_id}:{py_file.stem}"
+        db_id = py_file.stem.removeprefix("card_")
+        entry = cards.zh.get(db_id)
+        if entry is not None:
+            card.display_name = str(entry.get("title", "")) or card.display_name
+            card.text = str(entry.get("text", "")) or card.text
+        cards.add(card)
+
+
+def _normalize_element_path(
+    path: str,
+    default_mod: str,
+    known_mods: set[str],
+) -> tuple[str | None, str, str] | None:
+    """
+    解析 replace.json 中的元素路径
+
+    支持:
+        cards/Germany/card_a
+        code/cards/Germany/card_a.py
+        modB/code/cards/Germany/card_b.py
+        keywords/armor
+        modB:card_b
+
+    Returns:
+        (mod_id, kind, stem), 无法解析时为 None
+    """
+    text = path.strip().replace("\\", "/").strip("/")
+    if ":" in text:
+        mod_id, stem = text.split(":", 1)
+        return mod_id or default_mod, "cards", Path(stem).stem
+    parts = [part for part in text.split("/") if part]
+    if parts and parts[0] == "mods":
+        parts.pop(0)
+    mod_id: str | None = None
+    if parts and parts[0] in known_mods:
+        mod_id = parts.pop(0)
+    if parts and parts[0] == "code":
+        parts.pop(0)
+    if len(parts) < 2 or parts[0] not in ("cards", "keywords"):
+        logger.warning("无法解析替换路径: %s", path)
+        return None
+    kind = parts[0]
+    return mod_id or default_mod, kind, Path(parts[-1]).stem
+
+
+def _apply_replacements(mod_dirs: dict[str, Path]) -> None:
+    """读取每个 mod 的 replace.json, 将 B 的元素替换为 A 的元素"""
+    known = set(mod_dirs)
+    for mod_id, mod_dir in mod_dirs.items():
+        replace_file = mod_dir / "replace.json"
+        if not replace_file.is_file():
+            continue
+        try:
+            data = json.loads(replace_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.warning("replace.json 读取失败: %s", replace_file)
+            continue
+        if not isinstance(data, dict):
+            continue
+        for source_path, target_path in _string_dict(data).items():
+            source = _normalize_element_path(source_path, mod_id, known)
+            target = _normalize_element_path(target_path, "", known)
+            if source is None or target is None:
+                continue
+            source_mod, kind, source_stem = source
+            target_mod, _, target_stem = target
+            if source_mod is None:
+                source_mod = mod_id
+            if kind == "cards":
+                source_id = f"{source_mod}:{source_stem}"
+                source_card = cards.get(source_id)
+                if source_card is None:
+                    logger.warning("替换源卡牌不存在: %s", source_id)
+                    continue
+                target_id = f"{target_mod}:{target_stem}"
+                if not target_mod:
+                    candidates = [
+                        f"{candidate_mod}:{target_stem}"
+                        for candidate_mod in known
+                        if cards.get(f"{candidate_mod}:{target_stem}") is not None
+                    ]
+                    if not candidates:
+                        logger.warning("替换目标卡牌不存在: %s", target_stem)
+                        continue
+                    target_id = candidates[0]
+                if cards.get(target_id) is None:
+                    logger.warning("替换目标卡牌不存在: %s", target_id)
+                    continue
+                cards.replace(target_id, source_card)
+                logger.info("卡牌替换: %s -> %s", target_id, source_id)
+            else:
+                source_keyword = cards.keywords.get(source_stem)
+                if source_keyword is None:
+                    logger.warning("替换源关键词不存在: %s", source_stem)
+                    continue
+                if target_stem not in cards.keywords:
+                    logger.warning("替换目标关键词不存在: %s", target_stem)
+                    continue
+                cards.keywords[target_stem] = source_keyword
+                logger.info("关键词替换: %s -> %s", target_stem, source_stem)
+
+
+def load_mods() -> None:
+    """
+    扫描 mods 目录, 按依赖顺序加载所有 mod
+
+    目录名即 mod_id, 依赖在 info.json 的 dependencies 中声明
+    依赖缺失或成环的 mod 会被跳过并记录日志
+    """
+    if TYPE_CHECKING:
+        return
+    mods_dir = Path(__file__).resolve().parent / "mods"
+    if not mods_dir.is_dir():
+        return
+    cards.mods_dir = mods_dir
+    dirs: dict[str, Path] = {}
+    infos: dict[str, ModInfo] = {}
+    for mod_dir in sorted(mods_dir.iterdir()):
+        if not mod_dir.is_dir() or mod_dir.name.startswith(("_", ".")):
+            continue
+        mod_id = mod_dir.name
+        if mod_id in loaded_mods:
+            logger.warning(f"mod 重复, 已跳过: {mod_id}")
+            continue
+        dirs[mod_id] = mod_dir
+        infos[mod_id] = _read_mod_info(mod_dir, mod_id)
+    for mod_id in _resolve_load_order(dirs, infos):
+        _load_mod(dirs[mod_id], mod_id, infos[mod_id])
+        loaded_mods.add(mod_id)
+        logger.info(f"已加载 mod: {mod_id}")
+    _apply_replacements(dirs)
+
+# ==================== 牌组与开局 ====================
+
+
+# 默认卡组池, 循环填满 39 张
+# 测试配置: 只保留 AT>=4 的单位, 提高抽牌与空军数量
+DEFAULT_DECK_POOL: list[str] = [
+    # 开发
+    "kards:card_air_land_sea",
+    # 选取
+    "kards:card_spoils_of_war",
+    # 过牌
+    "kards:card_section_ii",
+    "kards:card_five_year_plan",
+    "kards:card_enemy_contact",
+    "kards:card_war_bonds",
+    # 守护
+    "kards:card_15th_motor_rifles",
+    "kards:card_royal_west_kents",
+    # 本次测试卡
+    "kards:card_sd_kfz_10_pak_38",
+    "kards:card_type_93",
+    "kards:card_isolation",
+    "kards:card_40_panzergrenadier",
+    "kards:card_289th_gatchina",
+    "kards:97th_rifles",
+    "kards:card_414th_rifles",
+    "kards:card_yokosuka_e14y",
+    "kards:card_75th_rifle_regiment",
+    "kards:card_kawanishi_h8k",
+]
+
+
+MAJOR_COUNTRIES: frozenset[Country] = frozenset(
+    {
+        Country.SOVIET,
+        Country.GERMANY,
+        Country.JAPAN,
+        Country.USA,
+        Country.BRITAIN,
+    }
+)
+"""可以作为主国的国家(UN 按英国处理)"""
+
+ALLY_CARD_LIMIT: int = 12
+"""盟国卡牌数量上限"""
+
+RARITY_COPY_LIMITS: dict[str, int] = {
+    "elite": 1,
+    "special": 2,
+    "limited": 3,
+    "standard": 4,
+}
+"""稀有度对应的单卡携带上限(金/银/铜/铁)"""
+
+
+def deck_country(card: CardData | Card, main: Country, ally: Country) -> Country:
+    """
+    返回卡牌在卡组构筑中的国家
+
+    流亡卡: 原国家不是主/盟国时, 按流亡目标国家计算
+
+    Args:
+        card: 卡牌或卡牌数据
+        main: 主国
+        ally: 盟国
+
+    Returns:
+        构筑国家
+    """
+    if card.exile_to is not None and card.country not in (main, ally):
+        return card.exile_to
+    return card.country
+
+
+def validate_deck(
+    card_ids: list[str],
+    main: Country,
+    ally: Country | None,
+    hq_country: Country | None = None,
+) -> list[str]:
+    """
+    校验卡组构筑规则
+
+    Args:
+        card_ids: 卡牌 id 列表
+        main: 主国
+        ally: 盟国
+        hq_country: 总部国家
+
+    Returns:
+        错误信息列表, 空列表表示合法
+    """
+    errors: list[str] = []
+    if ally is None:
+        errors.append("必须选择盟国")
+    elif ally == main:
+        errors.append("主国与盟国必须不同")
+    if main not in MAJOR_COUNTRIES:
+        errors.append(f"主国必须是主要国家: {main.name}")
+    if main is Country.NEUTRAL:
+        errors.append("中立不能作为主国")
+    if ally is Country.NEUTRAL:
+        errors.append("中立不能作为盟国")
+    if hq_country is not None and hq_country is not main:
+        errors.append("总部必须为主国")
+    ally_count = 0
+    counts: dict[str, int] = {}
+    for card_id in card_ids:
+        counts[card_id] = counts.get(card_id, 0) + 1
+        data = cards.get(card_id)
+        if data is None:
+            errors.append(f"未注册的卡牌: {card_id}")
+            continue
+        if data.country is Country.NEUTRAL:
+            errors.append(f"中立牌不能加入卡组: {data.display_name or data.name}")
+            continue
+        country = deck_country(data, main, main if ally is None else ally)
+        if country not in (main, ally):
+            errors.append(f"{data.display_name or data.name} 不属于主国或盟国")
+            continue
+        if country == ally:
+            ally_count += 1
+            if str(data.rare) == "elite":
+                errors.append(f"盟国不能包含精英卡: {data.display_name or data.name}")
+    if ally_count > ALLY_CARD_LIMIT:
+        errors.append(f"盟国卡牌数量不能超过 {ALLY_CARD_LIMIT}")
+    for card_id, count in counts.items():
+        data = cards.get(card_id)
+        if data is None:
+            continue
+        limit = RARITY_COPY_LIMITS.get(str(data.rare))
+        if limit is not None and count > limit:
+            errors.append(f"{data.display_name or data.name} 最多携带 {limit} 张")
+    return errors
+
+
+def make_deck(pool: list[str], owner: Player, country: Country | None = None) -> Deck:
+    """
+    按卡牌 id 池循环构造 39 张卡组
+
+    Args:
+        pool: 卡牌 id 池
+        owner: 卡组所有者
+        country: 总部国家
+
+    Returns:
+        卡组
+    """
+    hq = Card(
+        type=CardType.HQ,
+        cost=0,
+        name="HQ",
+        country=country or Country.NEUTRAL,
+        at=0,
+        df=20,
+        display_name="总部",
+    )
+    hq.owner = owner
+    hq.controller = owner
+    hq.initial_df = 20
+    hq.max_df = 20
+    deck_cards = [cards.create(pool[i % len(pool)]) for i in range(Deck.SIZE)]
+    for card in deck_cards:
+        card.owner = owner
+        card.controller = owner
+    return Deck(deck_cards, hq)
+
+
+def create_battle() -> BattleGround:
+    """
+    创建默认对局, 本地玩家对阵电脑
+
+    Returns:
+        战斗全局参数
+    """
+    config = BattleConfig(
+        host_kind=PlayerKind.HUMAN,
+        guest_kind=PlayerKind.AI,
+        host_country=Country.SOVIET,
+        guest_country=Country.BRITAIN,
+        host_ally=Country.USA,
+        guest_ally=Country.POLAND,
+        host_deck=DEFAULT_DECK_POOL,
+        guest_deck=DEFAULT_DECK_POOL,
+    )
+    deck_a = make_deck(config.host_deck, Player.A, config.host_country)
+    deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
+    ground = BattleGround(config, deck_a, deck_b)
+    for player in (Player.A, Player.B):
+        ground.hqs[player].df = 99
+        ground.hqs[player].max_df = 99
+        ground.hqs[player].initial_df = 99
+    return ground
+
+# ==================== 全局状态 ====================
+
+
+# 场景标识
+SCENE_MENU: str = "menu"
+SCENE_START: str = "start"
+SCENE_BATTLE: str = "battle"
+
+# 开始界面选项
+START_OPTIONS: list[str] = ["乱斗", "赛事", "竞技场", "战区", "战斗代码", "对战模式"]
+
+
+@dataclass
+class Status:
+    """
+    程序运行状态, 各字段可随时修改
+
+    Attributes:
+        running: 是否正在运行
+        paused: 是否暂停
+        quitting: 是否正在退出
+        scene: 当前场景
+    """
+    running: bool = True
+    """是否正在运行"""
+    paused: bool = False
+    """是否暂停"""
+    quitting: bool = False
+    """是否正在退出"""
+    scene: str = SCENE_MENU
+    """当前场景"""
+
+
+SAVE_DIR: Path = Path(__file__).resolve().parent / "saves"
+LAST_SAVE_FILE: Path = SAVE_DIR / "last.txt"
+DEFAULT_ADD_DECK_DELAY: int = 300
+
+DEFAULT_THANKS: dict[str, Any] = {
+    "设计": {
+        "awa猫猫awa": {
+            "贡献": "提供玩法设计灵感",
+            "bilibili": "1297979318",
+        }
+    },
+    "特别鸣谢": {
+        "柴某不添柴": {
+            "鸣谢": "一位退圈的kards up主",
+            "bilibili": "3546667764681371",
+        }
+    },
+}
+"""默认鸣谢内容, 原 configs/thanks.json"""
+
+
+@dataclass
+class SaveData:
+    """
+    存档配置
+
+    Attributes:
+        name: 存档名
+        path: 存档文件路径
+        start_time: 存档开始时间
+        add_deck_delay: 加入卡组动画延迟, 毫秒
+        fps: 帧率上限
+        mods: 本次加载的 mod id
+        thanks: 鸣谢内容
+    """
+    name: str
+    path: Path
+    start_time: str
+    add_deck_delay: int = DEFAULT_ADD_DECK_DELAY
+    fps: int = 60
+    mods: list[str] = field(default_factory=lambda: [""][:0])
+    thanks: dict[str, Any] = field(default_factory=lambda: DEFAULT_THANKS)
+
+    def to_json(self) -> dict[str, Any]:
+        """转换为存档 JSON"""
+        return {
+            "start_time": self.start_time,
+            "name": self.name,
+            "mods": self.mods,
+            "延迟": {"加入卡组": self.add_deck_delay},
+            "FPS": self.fps,
+            "thanks": self.thanks,
+        }
+
+
+class Global:
+    """
+    全局级别变量控制
+
+    Attributes:
+        FPS: 帧率上限
+        status: 程序运行状态
+        battle_ground: 战斗全局参数, 进入战斗前为 None
+        battle_ui: 战斗界面, 进入战斗前为 None
+        save_data: 当前存档配置
+    """
+    FPS: int = 60
+    status: Status = Status()
+    battle_ground: BattleGround | None = None
+    battle_ui: "BattleUI | None" = None
+    save_data: SaveData | None = None
+
+
+def _next_save_name() -> str:
+    """返回下一个可用的数字存档名"""
+    numbers: list[int] = []
+    if SAVE_DIR.is_dir():
+        for path in SAVE_DIR.glob("save*.json"):
+            suffix = path.stem.removeprefix("save")
+            if suffix.isdigit():
+                numbers.append(int(suffix))
+    return f"save{max(numbers, default=0) + 1}"
+
+
+def _write_save(data: SaveData) -> None:
+    """写入存档"""
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    data.path.write_text(
+        json.dumps(data.to_json(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    LAST_SAVE_FILE.write_text(data.name, encoding="utf-8")
+
+
+def load_or_create_save() -> SaveData:
+    """
+    读取上次存档, 不存在时创建新存档并写入 last.txt
+
+    Returns:
+        存档配置
+    """
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    name = ""
+    if LAST_SAVE_FILE.is_file():
+        name = LAST_SAVE_FILE.read_text(encoding="utf-8").strip()
+        name = Path(name).stem
+    if not name:
+        name = _next_save_name()
+    path = SAVE_DIR / f"{name}.json"
+    raw: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                raw = _string_dict(loaded)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("存档读取失败, 将重新创建: %s", path)
+    start_time = raw.get("start_time")
+    if not isinstance(start_time, str) or not start_time:
+        start_time = datetime.now().isoformat(timespec="seconds")
+    delay = raw.get("延迟")
+    add_deck_delay = DEFAULT_ADD_DECK_DELAY
+    if isinstance(delay, dict):
+        delay_data = _string_dict(delay)
+        value = delay_data.get("加入卡组")
+        if isinstance(value, int) and value >= 0:
+            add_deck_delay = value
+    fps = raw.get("FPS")
+    if not isinstance(fps, int) or fps <= 0:
+        fps = 60
+    mods_raw = raw.get("mods")
+    mods: list[str] = []
+    if isinstance(mods_raw, list):
+        for item in _object_list(mods_raw):
+            if isinstance(item, str):
+                mods.append(item)
+    if not mods:
+        mods = sorted(cards.mods)
+    thanks_raw = raw.get("thanks")
+    thanks = (
+        _string_dict(thanks_raw)
+        if isinstance(thanks_raw, dict)
+        else DEFAULT_THANKS
+    )
+    if not thanks:
+        thanks = DEFAULT_THANKS
+    data = SaveData(
+        name,
+        path,
+        start_time,
+        add_deck_delay,
+        fps,
+        mods,
+        thanks,
+    )
+    _write_save(data)
+    logger.info(
+        "存档: %s, mods=%s, 加入卡组延迟 %sms, FPS %s",
+        data.name,
+        data.mods,
+        data.add_deck_delay,
+        data.fps,
+    )
+    return data
+
+
+# ==================== 场景与菜单 ====================
+
+
+def _on_start_option(text: str) -> None:
+    """
+    开始界面选项的点击回调
+
+    Args:
+        text: 选项文字
+    """
+    if text == "对战模式":
+        if "kards" not in loaded_mods:
+            logger.warning("未加载 kards mod, 无法进入对战")
+            show_alert("未找到 kards mod, 无法开始对战\n\n请确认 mods/kards 目录存在且加载成功")
+            return
+        ground = create_battle()
+        ground.start()
+        Global.battle_ground = ground
+        Global.status.scene = SCENE_BATTLE
+        logger.info("进入战斗")
+    else:
+        logger.info(f"点击了未实现的选项: {text}")
+        show_alert(f"“{text}”模式尚未实现\n\n目前仅支持“对战模式”")
+
+
+def make_start_buttons(screen_width: int, screen_height: int, font: Font) -> ButtonGroup:
+    """
+    创建开始界面选项按钮组并自动布局
+
+    Args:
+        screen_width: 屏幕宽度
+        screen_height: 屏幕高度
+        font: 按钮文字字体
+
+    Returns:
+        按钮组
+    """
+    btn_height = 64
+    gap = 24
+    group = ButtonGroup()
+    for text in START_OPTIONS:
+        group.add(
+            Button(
+                text=text,
+                width=320,
+                height=btn_height,
+                on_click=lambda t=text: _on_start_option(t),
+                color=(60, 70, 90),
+                hover_color=(80, 100, 130),
+                text_color=(255, 255, 255),
+                font_size=36,
+                font=font,
+            )
+        )
+    total_height = len(group.buttons) * btn_height + (len(group.buttons) - 1) * gap
+    start_y = (screen_height - total_height) // 2
+    group.layout_vertical(screen_width // 2, start_y, gap=gap)
+    return group
+
+
+def handle_menu_click(
+    pos: tuple[int, int],
+    start_rect: pygame.Rect,
+    card_rect: pygame.Rect,
+) -> None:
+    """
+    处理主菜单场景的点击
+
+    Args:
+        pos: 鼠标点击位置
+        start_rect: 开始按钮的碰撞矩形
+        card_rect: 卡牌按钮的碰撞矩形
+    """
+    if start_rect.collidepoint(pos):
+        Global.status.scene = SCENE_START
+        logger.info("进入开始界面")
+    elif card_rect.collidepoint(pos):
+        show_alert("卡牌界面尚未完成")
+
+
+def show_alert(message: str) -> None:
+    """
+    弹出系统提示对话框
+
+    Args:
+        message: 提示内容
+    """
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(None, message, "KardsLike 提示", 0x40)
+
+
+def draw_menu(
+    screen: Surface,
+    start_button: Surface,
+    start_button_hover: Surface,
+    card_button: Surface,
+    card_button_hover: Surface,
+    start_rect: pygame.Rect,
+    card_rect: pygame.Rect,
+) -> None:
+    """
+    绘制主菜单场景
+
+    Args:
+        screen: 屏幕 Surface
+        start_button: 开始按钮图标
+        start_button_hover: 开始按钮悬浮图标
+        card_button: 卡牌按钮图标
+        card_button_hover: 卡牌按钮悬浮图标
+        start_rect: 开始按钮位置
+        card_rect: 卡牌按钮位置
+    """
+    screen.fill((0, 0, 0))
+    mouse = pygame.mouse.get_pos()
+    screen.blit(
+        start_button_hover if start_rect.collidepoint(mouse) else start_button,
+        start_rect,
+    )
+    screen.blit(
+        card_button_hover if card_rect.collidepoint(mouse) else card_button,
+        card_rect,
+    )
+
+
+def draw_start(screen: Surface, background: Surface, button_group: ButtonGroup) -> None:
+    """
+    绘制开始界面场景
+
+    Args:
+        screen: 屏幕 Surface
+        background: 背景图
+        button_group: 选项按钮组
+    """
+    screen.blit(background, (0, 0))
+    button_group.update()
+    button_group.draw(screen)
+
+
+def setup() -> Surface:
+    """
+    初始化 pygame 并创建无边框全屏窗口
+
+    Returns:
+        创建好的屏幕 Surface
+    """
+    if sys.platform == "win32":
+        # 开启 DPI 感知, 避免系统把画面放大导致模糊
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except (AttributeError, OSError):
+            pass
+    pygame.init()
+    screen = pygame.display.set_mode((0, 0), pygame.NOFRAME | pygame.FULLSCREEN)
+    pygame.display.set_caption("KardsLike")
+    logger.info("窗口创建成功, 分辨率 %s", screen.get_size())
+    return screen
+
+
+def load_font(size: int) -> Font:
+    """
+    加载支持中文的字体, 找不到则退回默认字体
+
+    Args:
+        size: 字号
+
+    Returns:
+        字体对象
+    """
+    path: str | None = (
+        pygame.font.match_font("microsoftyahei")
+        or pygame.font.match_font("simhei")
+        or pygame.font.match_font("simsun")
+        or None
+    )
+    if path is not None:
+        return pygame.font.Font(path, size)
+    return pygame.font.Font(None, size)
+
+# ==================== 战斗界面 ====================
+
+
+class AIController:
+    """电脑玩家决策器"""
+
+    def step(self, ground: BattleGround) -> None:
+        """
+        执行一步电脑决策: 能攻击则攻击, 否则移动, 否则出牌, 最后结束回合
+
+        Args:
+            ground: 战斗全局参数
+        """
+        opponent = Player.B
+        credits = ground.kredits[opponent].credits
+        support = ground.support_lines[opponent]
+        logger.debug(
+            "AI 决策: 回合 %s, 指挥点 %s, 手牌 %s, 支援 %s/%s, 前线 %s",
+            ground.turn_count,
+            credits,
+            len(ground.hands[opponent].cards),
+            len(support.units),
+            support.capacity,
+            ground.front_line.owner,
+        )
+
+        ready = [card for card in support.units if ground.can_act(card)]
+        if ground.front_line.owner is opponent:
+            ready.extend(card for card in ground.front_line.units if ground.can_act(card))
+
+        targets: list[Card] = list(ground.support_lines[Player.A].units)
+        if ground.front_line.owner is Player.A:
+            targets.extend(ground.front_line.units)
+        targets.append(ground.hqs[Player.A])
+
+        for attacker in ready:
+            if credits < attacker.operation_cost:
+                continue
+            for target in targets:
+                if not ground.can_attack(opponent, attacker, target):
+                    continue
+                if ground.attack_unit(opponent, attacker, target):
+                    return
+
+        front = ground.front_line
+        if front.owner in (None, opponent) and len(front.units) < front.capacity:
+            movers = sorted(
+                (card for card in support.units if ground.can_act(card)),
+                key=lambda card: card.at,
+                reverse=True,
+            )
+            for card in movers:
+                if credits < card.operation_cost:
+                    continue
+                if ground.move_unit(opponent, card, front):
+                    return
+
+        playable = [card for card in ground.hands[opponent].cards if card.cost <= credits]
+        for card in playable:
+            if card.is_unit and len(support.units) >= support.capacity:
+                continue
+            # 指向型指令没有合法目标时不要浪费一次使用
+            if card.targeted and card.target_valid is not None:
+                if not any(
+                    card.target_valid(target, opponent, ground)
+                    for target in ground.all_targets()
+                ):
+                    continue
+            if ground.use_card(opponent, card, support.hq_index):
+                if ground.pending_target is not None:
+                    pending = ground.pending_target
+                    target = next((item for item in ground.targets if pending.valid(item)), None)
+                    if target is None:
+                        ground.cancel_target()
+                        ground.end_turn()
+                        return
+                    ground.resolve_target(target)
+                return
+
+        ground.end_turn()
+
+
+class BattleUI:
+    """
+    战斗界面, 负责布局、绘制与点击交互
+
+    Attributes:
+        selected_hand: 已选中的手牌
+        selected_unit: 已选中的己方单位
+    """
+
+    MAX_SLOTS: int = 5
+
+    SLAM_SETTINGS: dict[str, tuple[int, float]] = {
+        "small": (240, 0.018),
+        "medium": (480, 0.070),
+        "large": (1200, 0.260),
+    }
+    """拍桌等级对应的(持续时间毫秒, 震动强度相对卡高)"""
+
+    def __init__(self, loader: ImageLoader, assets: Path, font: Font) -> None:
+        """
+        创建战斗界面
+
+        Args:
+            loader: 图片加载器
+            assets: mod 的 assets 目录
+            font: 默认字体
+        """
+        self.loader: ImageLoader = loader
+        self.assets: Path = assets
+        self.raw_face: Surface = loader.load(assets / "cards" / "card_face.png")
+        self.raw_back: Surface = loader.load(assets / "cards" / "card_back.png")
+        self.raw_hq: Surface = loader.load(assets / "cards" / "hq_placeholder.png")
+        self.eye_image: Surface = loader.load(assets / "ui" / "eye.png")
+        self.art_index: dict[str, str] = self._load_art_index(assets)
+        self.art_cache: dict[str, Surface | None] = {}
+        self.font_cache: dict[int, Font] = {}
+        self.selected_hand: Card | None = None
+        self.selected_unit: Card | None = None
+        self.drag_card: Card | None = None
+        self.drag_from_hand: bool = False
+        self.drag_pos: tuple[int, int] | None = None
+        self.drag_origin: pygame.Rect | None = None
+        self.hover_target: Card | None = None
+        self.hover_rect: pygame.Rect | None = None
+        self.frame_rects: dict[int, tuple[Card, pygame.Rect]] = {}
+        self.last_rects: dict[int, tuple[Card, pygame.Rect]] = {}
+        self.death_marks: list[tuple[str, pygame.Rect, int]] = []
+        self.draw_anims: list[tuple[Player, int]] = []
+        self.next_draw_anim: int = 0
+        self.next_discard_anim: int = 0
+        self.notice_surface: Surface | None = None
+        self.notice_surface_size: tuple[int, int] = (0, 0)
+        self.notice_until: int = 0
+        self.notice_start: int = 0
+        self._last_message: str = ""
+        self.hooked_ground: BattleGround | None = None
+        self.deck_rect: pygame.Rect | None = None
+        self.deck_rect_b: pygame.Rect | None = None
+        self.keyword_icons: dict[str, Surface | None] = {}
+        self.icon_entries: list[tuple[Card, pygame.Rect]] = []
+        self.shake_until: int = 0
+        self.shake_strength: int = 0
+        self.showcase: list[tuple[Card, int]] = []
+        self.discard_anims: list[tuple[Card, pygame.Rect, int]] = []
+        self.remove_anims: list[tuple[Card, pygame.Rect, int]] = []
+        self.slam_anims: dict[int, tuple[Card, pygame.Rect | None, int]] = {}
+        self.slam_impacted: set[int] = set()
+        self.slam_waves: list[tuple[pygame.Rect, int]] = []
+        self.hand_reveal: dict[int, int] = {}
+        self.unit_reveal: dict[int, int] = {}
+        self.spawn_anims: dict[int, int] = {}
+        self.next_unit_anim: int = 0
+        self.shuffle_anims: dict[Player, int] = {}
+        self.move_anims: dict[int, tuple[Card, pygame.Rect, int]] = {}
+        self.deck_add_anims: list[tuple[Card, pygame.Rect, int]] = []
+        self.damage_bullets: list[
+            tuple[tuple[int, int], tuple[int, int], int]
+        ] = []
+        self.choice_move_anims: list[tuple[Card, pygame.Rect, int]] = []
+        self.opp_eye_rect: pygame.Rect | None = None
+        self.reveal_hover_start: int = 0
+        self.reveal_hover_active: bool = False
+        self.last_hand_rects: dict[int, pygame.Rect] = {}
+        self.order_origins: dict[int, tuple[int, int]] = {}
+        self.preview_card: Card | None = None
+        self.selection_cards: list[Card] = []
+        self.selection_token: int = 0
+        self.confirm_rect: pygame.Rect | None = None
+        self.choice_rects: list[tuple[pygame.Rect, Card]] = []
+        self.choice_start: int = 0
+        self.choice_token: int = 0
+        self.message: str = ""
+        self.order_anims: list[tuple[Surface, pygame.Rect, int]] = []
+        self.ai_timer: int = 0
+        self.ai_controller: AIController = AIController()
+        self.screen_size: tuple[int, int] = (0, 0)
+        self.card_h: int = 0
+        self.card_w: int = 0
+        self.gap: int = 0
+        self.opp_hand_h: int = 0
+        self.opp_hand_w: int = 0
+        self.opp_hand_y: int = 0
+        self.opp_line_y: int = 0
+        self.front_y: int = 0
+        self.own_line_y: int = 0
+        self.own_hand_y: int = 0
+        self.status_y: int = 0
+        self.margin: int = 0
+        self.face: Surface = self.raw_face
+        self.back_small: Surface = self.raw_back
+        self.hq_image: Surface = self.raw_hq
+        self.font: Font = font
+        self.small_font: Font = font
+        self.big_font: Font = font
+        surface: Surface = pygame.display.get_surface()
+        self._apply_layout(surface.get_size())
+        self.end_button: Button = Button(
+            text="结束回合",
+            width=self.card_w * 6 // 5,
+            height=self.card_h // 3,
+            on_click=self._end_turn,
+            color=(70, 90, 60),
+            hover_color=(90, 120, 80),
+            font_size=max(20, self.card_h // 7),
+            font=load_font(max(20, self.card_h // 7)),
+        )
+        self._place_end_button()
+        self.continue_button: Button = Button(
+            text="继续",
+            width=self.card_w * 6 // 5,
+            height=self.card_h // 3,
+            on_click=self._continue_after_match,
+            color=(70, 90, 60),
+            hover_color=(90, 120, 80),
+            font_size=max(20, self.card_h // 7),
+            font=load_font(max(20, self.card_h // 7)),
+        )
+
+    def _continue_after_match(self) -> None:
+        """对局结束后返回开始界面"""
+        Global.battle_ground = None
+        Global.status.scene = SCENE_START
+        self._clear_drag()
+        self.message = ""
+
+    def _ensure_hooks(self, ground: BattleGround) -> None:
+        """
+        为当前战斗注册界面特效钩子
+
+        Args:
+            ground: 战斗全局参数
+        """
+        if self.hooked_ground is ground:
+            return
+        self.frame_rects.clear()
+        self.last_rects.clear()
+        self.death_marks.clear()
+        self.draw_anims.clear()
+        self.discard_anims.clear()
+        self.remove_anims.clear()
+        self.slam_anims.clear()
+        self.slam_impacted.clear()
+        self.slam_waves.clear()
+        self.hand_reveal.clear()
+        self.unit_reveal.clear()
+        self.spawn_anims.clear()
+        self.shuffle_anims.clear()
+        self.move_anims.clear()
+        self.deck_add_anims.clear()
+        self.damage_bullets.clear()
+        self.choice_move_anims.clear()
+        self.opp_eye_rect = None
+        self.reveal_hover_active = False
+        self.reveal_hover_start = 0
+        self.selection_cards.clear()
+        self.selection_token = 0
+        self.confirm_rect = None
+        self.choice_rects.clear()
+        self.choice_start = 0
+        self.choice_token = 0
+        self.showcase.clear()
+        self.order_anims.clear()
+        self.message = ""
+        self._last_message = ""
+        self.notice_until = 0
+        self.notice_start = 0
+        self.next_draw_anim = 0
+        self.next_discard_anim = 0
+        self.next_unit_anim = 0
+        ground.add_hook(EventType.DRAW, self._on_draw_event)
+        ground.add_hook(EventType.ENTER, self._on_enter_event)
+        ground.add_hook(EventType.USE, self._on_use_event)
+        ground.add_hook(EventType.DISCARD, self._on_discard_event)
+        ground.add_hook(EventType.LEAVE, self._on_leave_fx)
+        ground.add_hook(EventType.SHUFFLE, self._on_shuffle_event)
+        ground.add_hook(EventType.MOVE, self._on_move_event)
+        ground.add_hook(EventType.RETREAT, self._on_move_event)
+        ground.add_hook(EventType.ADD_TO_DECK, self._on_add_deck_event)
+        ground.add_hook(EventType.DAMAGED, self._on_damaged_event)
+        ground.add_hook(EventType.CHOICE_RESOLVED, self._on_choice_resolved)
+        self.hooked_ground = ground
+
+    def _on_add_deck_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录卡牌加入卡组的动画
+
+        Args:
+            event: ADD_TO_DECK 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        if not isinstance(card, Card):
+            return
+        record = self.last_hand_rects.get(id(card))
+        if record is not None:
+            start = record.copy()
+        else:
+            start = pygame.Rect(0, 0, self.card_w, self.card_h)
+            start.center = (self.screen_size[0] // 2, self.screen_size[1] // 2)
+        delay = (
+            Global.save_data.add_deck_delay
+            if Global.save_data is not None
+            else DEFAULT_ADD_DECK_DELAY
+        )
+        self.deck_add_anims.append(
+            (card, start, pygame.time.get_ticks() + delay)
+        )
+
+    def _on_damaged_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录伤害来源与目标位置, 用于播放短点射子弹
+
+        Args:
+            event: DAMAGED 事件
+            ground: 战斗全局参数
+        """
+        source = event.dict.get("source")
+        target = event.dict.get("target")
+        if not isinstance(source, Card) or not isinstance(target, Card):
+            return
+        if source is target:
+            return
+
+        def position(card: Card) -> tuple[int, int] | None:
+            record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
+            if record is not None:
+                return record[1].center
+            hand_rect = self.last_hand_rects.get(id(card))
+            if hand_rect is not None:
+                return hand_rect.center
+            return None
+
+        source_pos = position(source)
+        target_pos = position(target)
+        if source_pos is None or target_pos is None:
+            return
+        self.damage_bullets.append(
+            (source_pos, target_pos, pygame.time.get_ticks())
+        )
+
+    def _draw_bullets(self, screen: Surface) -> None:
+        """
+        绘制从伤害来源飞向目标的短点射, 每次三发
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if not self.damage_bullets:
+            return
+        now = pygame.time.get_ticks()
+        spacing = 90
+        flight = 420
+        alive: list[tuple[tuple[int, int], tuple[int, int], int]] = []
+        for source_pos, target_pos, start in self.damage_bullets:
+            if now - start > spacing * 2 + flight:
+                continue
+            alive.append((source_pos, target_pos, start))
+            for index in range(3):
+                progress = (now - start - index * spacing) / flight
+                if not 0 <= progress <= 1:
+                    continue
+                x = int(source_pos[0] + (target_pos[0] - source_pos[0]) * progress)
+                y = int(source_pos[1] + (target_pos[1] - source_pos[1]) * progress)
+                trail_x = int(source_pos[0] + (target_pos[0] - source_pos[0]) * max(0, progress - 0.12))
+                trail_y = int(source_pos[1] + (target_pos[1] - source_pos[1]) * max(0, progress - 0.12))
+                pygame.draw.line(screen, (255, 180, 60), (trail_x, trail_y), (x, y), 2)
+                pygame.draw.circle(screen, (255, 235, 140), (x, y), 4)
+            # 枪口闪光
+            if now - start <= spacing * 2:
+                pygame.draw.circle(screen, (255, 220, 120), source_pos, 6, 2)
+        self.damage_bullets = alive
+
+    def _on_choice_resolved(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录三选一结果, 三张候选卡一起向左退出
+
+        Args:
+            event: CHOICE_RESOLVED 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        if not isinstance(card, Card):
+            return
+        now = pygame.time.get_ticks()
+        records = [(item, rect.copy()) for rect, item in self.choice_rects]
+        if not records:
+            records = [(card, pygame.Rect(0, 0, self.card_w, self.card_h))]
+        for item, rect in records:
+            self.choice_move_anims.append((item, rect, now))
+        self.choice_rects.clear()
+
+    def _draw_choice_move_anims(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制三选一卡牌向左退出的动画
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if not self.choice_move_anims:
+            return
+        now = pygame.time.get_ticks()
+        duration = 360
+        alive: list[tuple[Card, pygame.Rect, int]] = []
+        for card, start, start_time in self.choice_move_anims:
+            elapsed = now - start_time
+            if elapsed >= duration:
+                continue
+            alive.append((card, start, start_time))
+            progress = max(0.0, min(1.0, elapsed / duration))
+            ease = 1 - (1 - progress) ** 3
+            # 全部飞出屏幕左端
+            target_x = -start.width - 24
+            x = int(start.x + (target_x - start.x) * ease)
+            rect = pygame.Rect(x, start.y, start.width, start.height)
+            self._blit_card(screen, card, rect)
+        self.choice_move_anims = alive
+
+    def _on_move_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录单位移动动画
+
+        Args:
+            event: MOVE 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        if not isinstance(card, Card):
+            return
+        record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
+        if record is not None:
+            self.move_anims[id(card)] = (card, record[1].copy(), pygame.time.get_ticks())
+
+    def _on_shuffle_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录卡组洗切动画
+
+        Args:
+            event: SHUFFLE 事件
+            ground: 战斗全局参数
+        """
+        player = event.dict.get("player")
+        if isinstance(player, Player):
+            self.shuffle_anims[player] = pygame.time.get_ticks()
+
+    def _on_discard_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录弃牌特效
+
+        Args:
+            event: DISCARD 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        player = event.dict.get("player")
+        if not isinstance(card, Card):
+            return
+        rect = self.last_hand_rects.get(id(card))
+        if rect is None:
+            if player is Player.A:
+                rect = pygame.Rect(0, 0, self.card_w, self.card_h)
+                rect.center = (self.screen_size[0] // 2, self.own_hand_y + self.card_h // 2)
+            else:
+                rect = pygame.Rect(0, 0, self.opp_hand_w, self.opp_hand_h)
+                rect.center = (
+                    self.screen_size[0] // 2,
+                    self.opp_hand_y + self.opp_hand_h // 2 + int(self.card_h * 0.25),
+                )
+        now = pygame.time.get_ticks()
+        start = max(now, self.next_discard_anim)
+        self.next_discard_anim = start + 260
+        self.discard_anims.append((card, rect.copy(), start))
+
+    def _on_leave_fx(self, event: Event, ground: BattleGround) -> None:
+        """
+        记录移除特效
+
+        Args:
+            event: LEAVE 事件
+            ground: 战斗全局参数
+        """
+        if event.dict.get("way") is not LeaveMethod.REMOVED:
+            return
+        card = event.dict.get("card")
+        if not isinstance(card, Card):
+            return
+        record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
+        rect = record[1].copy() if record is not None else pygame.Rect(0, 0, self.card_w, self.card_h)
+        self.remove_anims.append((card, rect, pygame.time.get_ticks()))
+
+    def _on_use_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        使用指令时记录左侧放大展示
+
+        Args:
+            event: USE 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        if isinstance(card, Card) and card.type is CardType.ORDER:
+            self.showcase.append((card, pygame.time.get_ticks()))
+            rect = self.last_hand_rects.get(id(card))
+            if rect is not None:
+                self.order_origins[id(card)] = rect.center
+
+    def _draw_showcase(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        在屏幕左侧绘制放大展示的指令卡
+
+        指向中的指令卡不显示, 避免和指向箭头叠在一起
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if not self.showcase:
+            return
+        now = pygame.time.get_ticks()
+        duration = 1400
+        pending = ground.pending_target
+        alive: list[tuple[Card, int]] = []
+        for card, start in self.showcase:
+            progress = (now - start) / duration
+            if progress >= 1:
+                continue
+            if pending is not None and pending.source is card:
+                continue
+            alive.append((card, start))
+            height = int(self.card_h * 1.6)
+            width = int(height * 500 / 702)
+            art = self._card_art(card)
+            image = pygame.transform.smoothscale(art if art is not None else self.face, (width, height))
+            appear = min(1.0, progress * 4)
+            disappear = min(1.0, (1 - progress) * 4)
+            image.set_alpha(int(255 * min(appear, disappear)))
+            x = self.margin - int((1 - appear) * 60)
+            y = (screen.get_height() - height) // 2
+            screen.blit(image, (x, y))
+            pygame.draw.rect(screen, (235, 235, 235), (x, y, width, height), 3, border_radius=6)
+        self.showcase = alive
+
+    def _on_draw_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        双方抽牌时记录一次飞牌动画
+
+        Args:
+            event: DRAW 事件
+            ground: 战斗全局参数
+        """
+        player = event.dict.get("player")
+        if not isinstance(player, Player):
+            return
+        now = pygame.time.get_ticks()
+        start = max(now, self.next_draw_anim)
+        self.next_draw_anim = start + 260
+        self.draw_anims.append((player, start))
+        card = event.dict.get("card")
+        if player is Player.A and isinstance(card, Card):
+            self.hand_reveal[id(card)] = start + 200
+
+    def _on_enter_event(self, event: Event, ground: BattleGround) -> None:
+        """
+        单位部署时按拍桌等级触发画面震动
+
+        Args:
+            event: ENTER 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        if not isinstance(card, Card):
+            return
+        if event.dict.get("method") == EntryMethod.ADD:
+            now = pygame.time.get_ticks()
+            start = max(now, self.next_unit_anim)
+            self.next_unit_anim = start + 220
+            self.unit_reveal[id(card)] = start
+            self.spawn_anims[id(card)] = start
+            return
+        if event.dict.get("method") != EntryMethod.DEPLOY:
+            return
+        level = self._slam_level(card)
+        if level is None:
+            return
+        now = pygame.time.get_ticks()
+        if level == "large":
+            self.slam_anims[id(card)] = (card, None, now)
+            return
+        duration, ratio = self.SLAM_SETTINGS[level]
+        self.shake_until = now + duration
+        minimum = 3 if level == "small" else 4
+        self.shake_strength = max(minimum, int(self.card_h * ratio))
+
+    def _slam_level(self, card: Card) -> str | None:
+        """
+        返回单位的拍桌等级
+
+        标签优先于 AT+DF 阈值, 同时拥有多个标签时使用最高等级
+
+        Args:
+            card: 进入战场的单位
+
+        Returns:
+            small/medium/large, 不触发时为 None
+        """
+        total = card.at + card.df
+        has_up = card.has_tag(CardTag.SLAM_UP_1) or card.has_tag(CardTag.SLAM_UP_2)
+        if total < 8 and not has_up:
+            return None
+        if total >= 12:
+            level = 2
+        elif total >= 10:
+            level = 1
+        else:
+            level = 0
+        if card.has_tag(CardTag.SLAM_UP_1):
+            level += 1
+        if card.has_tag(CardTag.SLAM_UP_2):
+            level += 2
+        level = min(level, 2)
+        return ("small", "medium", "large")[level]
+
+    def _apply_layout(self, size: tuple[int, int]) -> None:
+        """
+        按屏幕分辨率计算相对布局
+
+        Args:
+            size: 屏幕宽高
+        """
+        if size == self.screen_size:
+            return
+        self.screen_size = size
+        width, height = size
+        self.card_h = max(80, int(height * 0.195))
+        self.card_w = max(56, int(self.card_h * 500 / 702))
+        self.gap = max(8, int(self.card_w * 0.20))
+        self.opp_hand_h = max(40, int(height * 0.090))
+        self.opp_hand_w = max(30, int(self.opp_hand_h * 500 / 702))
+        self.opp_hand_y = int(height * 0.004)
+        self.opp_line_y = int(height * 0.096)
+        self.front_y = int(height * 0.300)
+        self.own_line_y = int(height * 0.504)
+        self.own_hand_y = int(height * 0.708)
+        self.status_y = int(height * 0.900)
+        self.margin = max(12, int(width * 0.021))
+        self.face = pygame.transform.smoothscale(self.raw_face, (self.card_w, self.card_h))
+        self.back_small = pygame.transform.smoothscale(self.raw_back, (self.opp_hand_w, self.opp_hand_h))
+        self.deck_back = pygame.transform.smoothscale(self.raw_back, (self.card_w, self.card_h))
+        self.hq_image = pygame.transform.smoothscale(self.raw_hq, (self.card_w, self.card_h))
+        self.font = load_font(max(20, int(height * 0.030)))
+        self.small_font = load_font(max(14, int(height * 0.020)))
+        self.big_font = load_font(max(40, int(height * 0.066)))
+        self.font_cache = {}
+        self.art_cache = {}
+
+    def _place_end_button(self) -> None:
+        """把结束回合按钮放到右下角"""
+        width, height = self.screen_size
+        self.end_button.rect.center = (
+            width - self.margin - self.end_button.rect.width // 2,
+            self.status_y + int(height * 0.043),
+        )
+
+    def _end_turn(self) -> None:
+        """结束当前回合并清空选中, 仅己方回合有效"""
+        ground = Global.battle_ground
+        if ground is not None and ground.pending_choice is not None:
+            ground.resolve_random_choice()
+        if ground is not None and ground.pending_selection is not None:
+            self._auto_select(ground)
+        if ground is not None and ground.turn_owner is Player.A:
+            ground.end_turn()
+        self.selected_hand = None
+        self.selected_unit = None
+
+    def _auto_select(self, ground: BattleGround) -> None:
+        """
+        结束回合时按从左到右自动完成选取
+
+        Args:
+            ground: 战斗全局参数
+        """
+        request = ground.pending_selection
+        if request is None or request.player is not Player.A:
+            return
+        chosen = list(self.selection_cards)
+        for card in ground.hands[Player.A].cards:
+            if len(chosen) >= request.max_count:
+                break
+            if card in chosen:
+                continue
+            if request.filter is not None and not request.filter(card):
+                continue
+            chosen.append(card)
+        if not ground.resolve_selection(chosen):
+            ground.cancel_selection()
+        self.selection_cards.clear()
+
+    def _add_order_anim(self, rect: pygame.Rect) -> None:
+        """记录一次指令脱离手牌的动画"""
+        self.order_anims.append((self.face, rect.copy(), pygame.time.get_ticks()))
+
+    def _draw_order_anims(self, screen: Surface) -> None:
+        """绘制指令脱离手牌的动画"""
+        now = pygame.time.get_ticks()
+        alive: list[tuple[Surface, pygame.Rect, int]] = []
+        for image, rect, start in self.order_anims:
+            progress = (now - start) / 450
+            if progress >= 1:
+                continue
+            flying = image.copy()
+            flying.set_alpha(int(255 * (1 - progress)))
+            screen.blit(flying, rect.move(0, -int(180 * progress)))
+            alive.append((image, rect, start))
+        self.order_anims = alive
+
+    def update(self, dt: int) -> None:
+        """
+        每帧更新, 驱动电脑回合
+
+        Args:
+            dt: 距上一帧的毫秒数
+        """
+        ground = Global.battle_ground
+        if ground is None or ground.winner is not None:
+            return
+        if ground.pending_selection is not None:
+            return
+        if ground.pending_choice is not None:
+            return
+        if ground.turn_owner is Player.B and ground.kind_of(Player.B) is PlayerKind.AI:
+            self.ai_timer += dt
+            if self.ai_timer >= 1000:
+                self.ai_timer = 0
+                self.ai_controller.step(ground)
+        else:
+            self.ai_timer = 0
+
+    def _text(
+        self,
+        screen: Surface,
+        text: str,
+        pos: tuple[int, int],
+        color: Color = (230, 230, 230),
+        font: Font | None = None,
+        center: bool = False,
+    ) -> None:
+        """在指定位置绘制文字"""
+        surface = (font or self.small_font).render(text, True, color)
+        rect = surface.get_rect()
+        if center:
+            rect.center = pos
+        else:
+            rect.topleft = pos
+        screen.blit(surface, rect)
+
+    NATION_DIRS: dict[Country, str] = {
+        Country.ANZAC: "Anzac",
+        Country.BRITAIN: "Britain",
+        Country.FINLAND: "Finland",
+        Country.FRANCE: "France",
+        Country.GERMANY: "Germany",
+        Country.ITALY: "Italy",
+        Country.JAPAN: "Japan",
+        Country.NEUTRAL: "Neutral",
+        Country.POLAND: "Poland",
+        Country.SOVIET: "Soviet",
+        Country.USA: "USA",
+    }
+
+    @staticmethod
+    def _load_art_index(assets: Path) -> dict[str, str]:
+        """
+        读取中文名与卡图的对应索引
+
+        Args:
+            assets: 资源根目录
+
+        Returns:
+            卡牌 id 与中文名到卡图相对路径的映射
+        """
+        index_path = assets.parent / "data" / "art_index.json"
+        if not index_path.is_file():
+            return {}
+        try:
+            raw: object = json.loads(index_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return {}
+        mapping: dict[str, str] = {}
+        if not isinstance(raw, dict):
+            return mapping
+        for card_id, record in _string_dict(raw).items():
+            if not isinstance(record, dict):
+                continue
+            entry = _string_dict(record)
+            path = str(entry.get("path", ""))
+            if not path:
+                continue
+            mapping[card_id] = path
+            title = str(entry.get("title", ""))
+            if title:
+                mapping[title] = path
+        return mapping
+
+    def display_title(self, card: Card) -> str:
+        """
+        返回卡牌显示名, 优先中文
+
+        Args:
+            card: 卡牌
+
+        Returns:
+            显示名
+        """
+        return card.display_name or card.name
+
+    def _card_art(self, card: Card) -> Surface | None:
+        """
+        加载卡图, 优先用中文名或 id 查索引, 再退回国家目录
+
+        Args:
+            card: 卡牌
+
+        Returns:
+            卡图, 不存在时为 None
+        """
+        key = card.name
+        if key in self.art_cache:
+            return self.art_cache[key]
+        art = card.art
+        relative = self.art_index.get(card.display_name) or self.art_index.get(card.name)
+        path: Path | None = None
+        if art:
+            nation = self.NATION_DIRS.get(card.country)
+            if nation:
+                path = self.assets / "cards" / nation / art
+        if path is None or not path.is_file():
+            if relative:
+                path = self.assets / "cards" / relative
+        if path is None or not path.is_file():
+            nation = self.NATION_DIRS.get(card.country)
+            asset_name = card.name.removeprefix("card_")
+            path = self.assets / "cards" / nation / f"{asset_name}.png" if nation else None
+        image: Surface | None = None
+        if path is not None and path.is_file():
+            try:
+                image = pygame.transform.smoothscale(pygame.image.load(str(path)), (self.card_w, self.card_h))
+            except pygame.error:
+                image = None
+        self.art_cache[key] = image
+        return image
+
+    def _blit_card(self, screen: Surface, card: Card, rect: pygame.Rect, show_keywords: bool = False) -> None:
+        """
+        绘制卡面, 有卡图用卡图并覆盖实际数值, 否则用占位卡面加中文文字
+
+        Args:
+            screen: 屏幕 Surface
+            card: 卡牌
+            rect: 目标矩形
+            show_keywords: 是否记录关键词图标(只在场上显示)
+        """
+        art = self._card_art(card)
+        if art is not None:
+            if art.get_size() != rect.size:
+                art = pygame.transform.smoothscale(art, rect.size)
+            screen.blit(art, rect)
+            self._draw_stats_overlay(screen, card, rect)
+        else:
+            screen.blit(self.face, rect)
+            self._text(screen, self.display_title(card)[:6], (rect.centerx, rect.y + 12), (25, 25, 25), center=True)
+            self._text(screen, str(card.cost), (rect.x + 6, rect.y + 4), (30, 30, 110))
+            if card.is_unit:
+                self._text(screen, str(card.at), (rect.x + 6, rect.bottom - 26), (20, 90, 30))
+                self._text(screen, str(card.df), (rect.right - 26, rect.bottom - 26), (110, 30, 30))
+        if card.inhibited:
             # 被抑制的卡牌显示 X 形效果图标
             margin = max(10, rect.width // 5)
             color = (220, 60, 60)
