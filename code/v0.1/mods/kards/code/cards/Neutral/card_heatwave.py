@@ -31,7 +31,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
             continue
         amount = 2 if unit.type in (CardType.INFANTRY, CardType.TANK, CardType.ARTILLERY) else 3
         unit.add_temporary_at(amount)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

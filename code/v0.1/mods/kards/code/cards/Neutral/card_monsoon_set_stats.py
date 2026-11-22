@@ -33,7 +33,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         unit.operation_cost = 2
         unit.df = 2
         unit.max_df = 2
-    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

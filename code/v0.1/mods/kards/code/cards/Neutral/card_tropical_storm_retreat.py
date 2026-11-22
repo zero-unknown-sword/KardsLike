@@ -40,7 +40,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     ]
     if targets:
         ground.kill(random.choice(targets), card)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

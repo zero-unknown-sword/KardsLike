@@ -38,7 +38,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         unit.remove_tag(CardTag.MOVED)
         unit.remove_tag(CardTag.ATTACKED)
         unit.remove_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

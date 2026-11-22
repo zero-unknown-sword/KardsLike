@@ -30,7 +30,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for unit in units:
         if ground.add_unit(player, unit):
             ground.suppress(unit)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

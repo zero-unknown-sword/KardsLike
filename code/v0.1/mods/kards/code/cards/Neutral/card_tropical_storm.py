@@ -35,7 +35,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for player in (Player.A, Player.B):
         for _ in range(maximum):
             ground.draw(player, card)
-    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

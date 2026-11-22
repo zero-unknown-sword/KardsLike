@@ -31,7 +31,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     unit = next((item for item in reversed(deck) if item.is_unit), None)
     if unit is not None and ground.add_unit(player, unit):
         ground.suppress(unit)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

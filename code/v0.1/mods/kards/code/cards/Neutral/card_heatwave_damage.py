@@ -45,7 +45,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
             ground.damage(random.choice(targets), unit.at, unit, DamageType.NONE)
 
     add_turn_hook(ground, player, EventType.ENTER, on_enter)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

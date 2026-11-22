@@ -33,7 +33,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     ]
     if targets:
         ground.damage(random.choice(targets), 5, card, DamageType.NONE)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

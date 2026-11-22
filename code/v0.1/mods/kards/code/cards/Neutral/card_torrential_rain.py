@@ -31,7 +31,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         if not unit.is_unit or unit.controller is not player:
             continue
         ground.buff(unit, df=3 if unit.type is CardType.INFANTRY else 2)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

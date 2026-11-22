@@ -56,7 +56,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         ground.damage(target, 6, card, DamageType.NONE)
         for neighbor in neighbors:
             ground.damage(neighbor, 2, card, DamageType.NONE)
-        start_climate_choice(ground, player, card)
 
     ground.request_target(player, card, lambda target: target_valid(target, player, ground), apply)
 

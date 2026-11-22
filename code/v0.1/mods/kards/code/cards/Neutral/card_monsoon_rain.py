@@ -35,7 +35,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
                 ground.discard_card(player, target)
             elif target.is_unit and target.zone is Zone.BOARD:
                 ground.remove_unit(target, card)
-    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

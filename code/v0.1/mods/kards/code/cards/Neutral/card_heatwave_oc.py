@@ -41,7 +41,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
                 unit.operation_cost = old_cost[id(unit)]
 
     add_end_cleanup(ground, player, cleanup)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

@@ -29,7 +29,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for unit in list(ground.all_targets()):
         if unit.is_unit and unit.zone is Zone.BOARD:
             ground.retreat_unit(unit, card)
-    start_climate_choice(ground, event.player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

@@ -33,11 +33,9 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def discard_selected(selected: list[Card]) -> None:
         for item in selected:
             ground.discard_card(player, item)
-        start_climate_choice(ground, player, card)
 
     hand = ground.hands[player].cards
     if not hand:
-        start_climate_choice(ground, player, card)
         return
     if ground.kind_of(player) is PlayerKind.AI:
         discard_selected([random.choice(hand)])

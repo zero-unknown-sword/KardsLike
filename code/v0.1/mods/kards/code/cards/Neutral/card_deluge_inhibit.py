@@ -36,7 +36,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def apply(target: Card) -> None:
         ground.inhibit_unit(target, card)
         ground.draw(player, card)
-        start_climate_choice(ground, player, card)
 
     ground.request_target(player, card, lambda target: target_valid(target, player, ground), apply)
 

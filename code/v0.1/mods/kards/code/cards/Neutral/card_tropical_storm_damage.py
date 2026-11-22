@@ -48,7 +48,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         ]
         if targets:
             ground.damage(random.choice(targets), 1, card, DamageType.NONE)
-        start_climate_choice(ground, player, card)
 
     ground.request_target(player, card, lambda target: target_valid(target, player, ground), apply)
 

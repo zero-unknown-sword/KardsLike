@@ -36,7 +36,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         if not targets:
             break
         ground.buff(random.choice(targets), df=1)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

@@ -30,7 +30,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     for unit in ground.all_targets():
         if unit.is_unit and unit.controller is not player:
             ground.suppress(unit)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

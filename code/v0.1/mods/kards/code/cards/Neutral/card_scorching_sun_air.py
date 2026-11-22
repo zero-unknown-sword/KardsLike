@@ -53,7 +53,6 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
                 unit.operation_cost = old_cost[id(unit)]
 
     add_turn_hook(ground, player, EventType.ATTACK, on_attack, cleanup)
-    start_climate_choice(ground, player, card)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,
