@@ -6534,7 +6534,6 @@ class BattleUI:
             rect = pygame.Rect(draw_x, y, width, height)
             self._blit_card(screen, card, rect)
             if progress >= 1:
-                self._draw_choice_text(screen, card, rect)
                 self.choice_rects.append((final, card))
 
     def _draw_choice_text(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:

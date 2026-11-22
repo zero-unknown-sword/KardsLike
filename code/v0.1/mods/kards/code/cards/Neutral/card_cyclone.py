@@ -1,4 +1,4 @@
-"""旋风"""
+"""旋风(抽牌)"""
 import sys
 from pathlib import Path
 
