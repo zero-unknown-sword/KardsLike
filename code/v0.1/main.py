@@ -958,6 +958,8 @@ class Card:
         self.revealed: bool = False
         self.initial_at: int = at
         self.initial_df: int = df
+        self.initial_operation_cost: int = operation_cost
+        self.inhibited: bool = False
         self.initial_cost: int = cost
         self.at_bonus: int = 0
         self.df_bonus: int = 0
@@ -1112,6 +1114,7 @@ class Card:
         self.aura_sources.clear()
         self.df = min(MAX_STAT, self.initial_df + self.df_bonus)
         self.max_df = self.df
+        self.operation_cost = self.initial_operation_cost
         self.cost = max(0, self.initial_cost + self.cost_bonus)
         self.damage_amount = 0
         self.buff_at = 0
@@ -1155,6 +1158,8 @@ class Card:
 
     def has_keyword(self, keyword_id: str) -> bool:
         """是否具有指定关键词"""
+        if self.inhibited:
+            return False
         return keyword_id in self.keywords or keyword_id in self.aura_keywords
 
     def keyword_val(self, keyword_id: str) -> int | str | None:
@@ -1195,6 +1200,8 @@ class Card:
             at: 攻击力增量
             keyword: 临时关键词
         """
+        if self.inhibited:
+            return
         if at:
             self.aura_at += at
             self.at += at
@@ -2415,6 +2422,8 @@ class BattleGround:
             keyword: 临时关键词
             source: 光环来源卡牌
         """
+        if target.inhibited or source.inhibited:
+            return
         target.add_aura(at=at, keyword=keyword)
         if keyword == "blitz":
             # 光环获得闪击时, 同时清除部署当回合不能行动的限制
@@ -3687,6 +3696,24 @@ class BattleGround:
         ):
             result.extend(reversed(line.units))
         return result
+
+    def inhibit_unit(self, card: Card, source: Card) -> None:
+        """
+        抑制单位: 移除全部效果和关键词, 重置攻击力/最大防御力/行动花费
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        card.inhibited = True
+        card.keywords.clear()
+        card.aura_keywords.clear()
+        card.procedures.clear()
+        card.at = card.initial_at
+        card.max_df = card.initial_df
+        card.df = min(card.df, card.max_df)
+        card.operation_cost = card.initial_operation_cost
+        card.clear_auras()
 
     def retreat_unit(self, card: Card, source: Card) -> None:
         """
@@ -5813,6 +5840,25 @@ class BattleUI:
             if card.is_unit:
                 self._text(screen, str(card.at), (rect.x + 6, rect.bottom - 26), (20, 90, 30))
                 self._text(screen, str(card.df), (rect.right - 26, rect.bottom - 26), (110, 30, 30))
+        if card.inhibited:
+            # 被抑制的卡牌显示 X 形效果图标
+            margin = max(10, rect.width // 5)
+            color = (220, 60, 60)
+            width = max(3, rect.width // 40)
+            pygame.draw.line(
+                screen,
+                color,
+                (rect.x + margin, rect.y + margin),
+                (rect.right - margin, rect.bottom - margin),
+                width,
+            )
+            pygame.draw.line(
+                screen,
+                color,
+                (rect.right - margin, rect.y + margin),
+                (rect.x + margin, rect.bottom - margin),
+                width,
+            )
         if show_keywords:
             self.icon_entries.append((card, rect))
 

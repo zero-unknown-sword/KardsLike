@@ -1,4 +1,4 @@
-"""旋风"""
+"""旋风 (撤退)"""
 import random
 import sys
 from pathlib import Path

@@ -46,9 +46,21 @@ WEATHER_VARIANTS: dict[str, list[str]] = {
         "kards:card_scorching_sun_air",
         "kards:card_scorching_sun_buff",
     ],
-    "kards:card_deluge": ["kards:card_deluge"],
-    "kards:card_torrential_rain": ["kards:card_torrential_rain"],
-    "kards:card_monsoon_rain": ["kards:card_monsoon_rain"],
+    "kards:card_deluge": [
+        "kards:card_deluge",
+        "kards:card_deluge_inhibit",
+        "kards:card_deluge_enemy_at",
+    ],
+    "kards:card_torrential_rain": [
+        "kards:card_torrential_rain",
+        "kards:card_torrential_suppress",
+        "kards:card_torrential_draw_discard",
+    ],
+    "kards:card_monsoon_rain": [
+        "kards:card_monsoon_rain",
+        "kards:card_monsoon_set_stats",
+        "kards:card_monsoon_infantry",
+    ],
     "kards:card_thunderstorm": [
         "kards:card_thunderstorm",
         "kards:card_thunderstorm_random5",
