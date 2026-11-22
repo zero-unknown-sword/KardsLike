@@ -2451,12 +2451,13 @@ class BattleGround:
         """
         self.hooks.setdefault(trigger_id(trigger), []).append(handler)
 
-    def emit(self, event: Event) -> None:
+    def emit(self, event: Event, extra_cards: list[Card] | None = None) -> None:
         """
         先执行全局钩子, 再向场上所有单位广播事件
 
         Args:
             event: 事件
+            extra_cards: 不在手牌/卡组/场上但仍需接收事件的卡牌
         """
         for handler in self.hooks.get(event.type, []):
             handler(event, self)
@@ -2472,6 +2473,11 @@ class BattleGround:
                     continue
                 seen.add(id(card))
                 card.update(event, self)
+        for card in extra_cards or []:
+            if id(card) in seen:
+                continue
+            seen.add(id(card))
+            card.update(event, self)
 
     def update(self, dt: int) -> None:
         """
@@ -2875,7 +2881,10 @@ class BattleGround:
                 player=player,
                 targets=list(self.targets),
             )
-            self.emit(use_event)
+            # 指令先离开手牌再结算, 抽牌时手牌已腾出位置
+            if card in self.hands[player].cards:
+                self.hands[player].remove(card)
+            self.emit(use_event, extra_cards=[card])
             if self.pending_target is not None:
                 self.pending_target.cancel = lambda: self.cancel_order(player, card, effective_cost)
                 self.pending_target.finish = lambda: self.finish_order(player, card)
@@ -3247,7 +3256,7 @@ class BattleGround:
             owner = choice.player
 
             def add_weather() -> None:
-                self.give_card(owner, card_id, Zone.HAND)
+                self.give_card(owner, card_id, Zone.HAND, revealed=False)
 
             self.start_shadow_timer(owner, add_weather)
         elif choice.destination is Zone.HAND:

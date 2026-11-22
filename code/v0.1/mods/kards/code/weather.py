@@ -123,7 +123,7 @@ def start_forecast(
     if not slots:
         return False
     chosen_ids = [
-        random.choice(WEATHER_VARIANTS[card_id])
+        WEATHER_VARIANTS[card_id][0]
         for card_id in slots
     ]
     choices: list[Card] = []
