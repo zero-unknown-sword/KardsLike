@@ -12,6 +12,7 @@ import random
 import sys
 import json
 import time
+import textwrap
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -5843,25 +5844,6 @@ class BattleUI:
             if card.is_unit:
                 self._text(screen, str(card.at), (rect.x + 6, rect.bottom - 26), (20, 90, 30))
                 self._text(screen, str(card.df), (rect.right - 26, rect.bottom - 26), (110, 30, 30))
-        if card.inhibited:
-            # 被抑制的卡牌显示 X 形效果图标
-            margin = max(10, rect.width // 5)
-            color = (220, 60, 60)
-            width = max(3, rect.width // 40)
-            pygame.draw.line(
-                screen,
-                color,
-                (rect.x + margin, rect.y + margin),
-                (rect.right - margin, rect.bottom - margin),
-                width,
-            )
-            pygame.draw.line(
-                screen,
-                color,
-                (rect.right - margin, rect.y + margin),
-                (rect.x + margin, rect.bottom - margin),
-                width,
-            )
         if show_keywords:
             self.icon_entries.append((card, rect))
 
@@ -5903,6 +5885,8 @@ class BattleUI:
             按从上到下顺序排列的图标描述
         """
         items: list[tuple[str, str | int]] = []
+        if card.inhibited:
+            items.append(("inhibited", 0))
         for keyword_id in dict.fromkeys([*card.keywords, *card.aura_keywords]):
             if keyword_id == "armor":
                 continue
@@ -5956,6 +5940,25 @@ class BattleUI:
         x = rect.right
         y = rect.y
         for kind, value in items:
+            if kind == "inhibited":
+                pygame.draw.rect(screen, (70, 25, 25), (x, y, size, size))
+                pygame.draw.rect(screen, (220, 60, 60), (x, y, size, size), 2)
+                pygame.draw.line(
+                    screen,
+                    (235, 80, 80),
+                    (x + 3, y + 3),
+                    (x + size - 3, y + size - 3),
+                    3,
+                )
+                pygame.draw.line(
+                    screen,
+                    (235, 80, 80),
+                    (x + size - 3, y + 3),
+                    (x + 3, y + size - 3),
+                    3,
+                )
+                y += size + gap
+                continue
             icon_id = str(value) if kind == "keyword" else kind
             if kind == "armor":
                 icon = self._keyword_icon("guard")
@@ -6531,7 +6534,39 @@ class BattleUI:
             rect = pygame.Rect(draw_x, y, width, height)
             self._blit_card(screen, card, rect)
             if progress >= 1:
+                self._draw_choice_text(screen, card, rect)
                 self.choice_rects.append((final, card))
+
+    def _draw_choice_text(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:
+        """
+        在三选一卡牌下方显示实际效果文本
+
+        Args:
+            screen: 屏幕 Surface
+            card: 候选卡牌
+            rect: 卡牌矩形
+        """
+        if not card.has_keyword("weather"):
+            return
+        font_size = max(12, rect.width // 14)
+        font = load_font(font_size)
+        lines = textwrap.wrap(card.text, width=16)[:4]
+        if not lines:
+            return
+        line_height = font.get_linesize()
+        panel_h = line_height * len(lines) + 8
+        panel = pygame.Rect(rect.x, rect.bottom + 4, rect.width, panel_h)
+        overlay = pygame.Surface(panel.size, pygame.SRCALPHA)
+        overlay.fill((15, 15, 15, 205))
+        screen.blit(overlay, panel)
+        for index, line in enumerate(lines):
+            image = font.render(line, True, (245, 235, 200))
+            screen.blit(
+                image,
+                image.get_rect(
+                    center=(panel.centerx, panel.y + 4 + index * line_height + line_height // 2)
+                ),
+            )
 
     def _target_predicate(
         self, ground: BattleGround
