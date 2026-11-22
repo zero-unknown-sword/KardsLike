@@ -1009,12 +1009,19 @@ class Card:
 
     @property
     def cost(self) -> int:
-        """花费"""
+        """卡面花费, 用于预报分级"""
         return self._cost.val
 
     @cost.setter
     def cost(self, value: int) -> None:
         self._cost.set(value)
+
+    @property
+    def effective_cost(self) -> int:
+        """实际支付花费, 自动使用卡牌为 0"""
+        if self.has_keyword("pfwd"):
+            return 0
+        return self._cost.val
 
     @property
     def operation_cost(self) -> int:
@@ -1921,6 +1928,8 @@ class CardChoice:
     loot_event: bool = False
     title: str = ""
     callback: Callable[[Card, list[Card]], None] | None = None
+    next_turn: bool = False
+    """选中牌是否延迟到下个友方回合开始时加入手牌"""
 
 
 @dataclass
@@ -2029,6 +2038,15 @@ class BattleGround:
         """延迟返回手牌的单位与来源"""
         self.pending_isolated: list[tuple[Card, Player]] = []
         """被孤立等待返回的单位与返回回合玩家"""
+        self.pending_weather: dict[Player, str | None] = {Player.A: None, Player.B: None}
+        """预报选中的天气卡 id, 在下个友方回合开始时加入手牌"""
+        self.weather_used_turn: dict[Player, int] = {Player.A: -1, Player.B: -1}
+        """双方最近一次使用天气的回合序号"""
+        self.current_weather: dict[Player, str | None] = {
+            Player.A: None,
+            Player.B: None,
+        }
+        """双方当前天气"""
         self.pending_actions: list[tuple[int, Callable[[], None]]] = []
         """延迟执行的动作"""
         self.hooks: dict[int, list[Callable[[Event, "BattleGround"], None]]] = {}
@@ -2143,6 +2161,7 @@ class BattleGround:
             return None
         if self.hands[player].add(card):
             card.zone = Zone.HAND
+            self.auto_use_card(card, player)
         else:
             self.discard_card(player, card)
         self.emit(Event(EventType.DRAW, card=card, player=player, source=source))
@@ -2490,6 +2509,10 @@ class BattleGround:
         else:
             self.kredits[player].start_turn()
         self.turns_taken[player] += 1
+        weather_id = self.pending_weather[player]
+        if weather_id is not None:
+            self.pending_weather[player] = None
+            self.give_card(player, weather_id, Zone.HAND)
         special_source = self.special_source(player)
         self.draw(player, special_source)
         extra = self.pending_turn_draws[player]
@@ -2738,12 +2761,15 @@ class BattleGround:
             return False
         if card not in self.hands[player].cards:
             return False
-        if not self.kredits[player].can_afford(card.cost):
+        if card.has_keyword("weather") and self.weather_used_turn[player] == self.turn_count:
+            return False
+        effective_cost = card.effective_cost
+        if not self.kredits[player].can_afford(effective_cost):
             return False
         if card.is_unit:
             if len(self.support_lines[player].units) >= self.support_lines[player].capacity:
                 return False
-            self.kredits[player].spend(card.cost)
+            self.kredits[player].spend(effective_cost)
             self.check_bond(player, card)
             card.owner = player
             card.controller = player
@@ -2791,13 +2817,15 @@ class BattleGround:
             self.apply_intel(player, card)
             if self.pending_target is not None:
                 # 部署效果先结算, 结算完成后再广播 ENTER
-                self.pending_target.cancel = lambda: self.cancel_deploy(player, card, card.cost)
+                self.pending_target.cancel = lambda: self.cancel_deploy(player, card, effective_cost)
                 self.pending_target.finish = finish_deploy
             else:
                 finish_deploy()
             return True
         if card.type is CardType.ORDER:
-            self.kredits[player].spend(card.cost)
+            self.kredits[player].spend(effective_cost)
+            if card.has_keyword("weather"):
+                self.weather_used_turn[player] = self.turn_count
             self.check_bond(player, card)
             self.apply_intel(player, card)
             self.targets = self.all_targets()
@@ -2810,7 +2838,7 @@ class BattleGround:
             )
             self.emit(use_event)
             if self.pending_target is not None:
-                self.pending_target.cancel = lambda: self.cancel_order(player, card, card.cost)
+                self.pending_target.cancel = lambda: self.cancel_order(player, card, effective_cost)
                 self.pending_target.finish = lambda: self.finish_order(player, card)
                 return True
             self.hands[player].remove(card)
@@ -2942,6 +2970,7 @@ class BattleGround:
         loot_event: bool = False,
         title: str = "选择一张牌",
         callback: Callable[[Card, list[Card]], None] | None = None,
+        next_turn: bool = False,
     ) -> bool:
         """
         开始一次三选一
@@ -2979,9 +3008,93 @@ class BattleGround:
             loot_event,
             title,
             callback,
+            next_turn,
         )
         if self.kind_of(player) is PlayerKind.AI:
             self.resolve_random_choice()
+        return True
+
+    def _resolve_auto_target(self) -> None:
+        """自动使用卡牌时, 自动选择第一个合法目标"""
+        pending = self.pending_target
+        if pending is None:
+            return
+        target = next((item for item in self.targets if pending.valid(item)), None)
+        if target is None:
+            self.cancel_target()
+            return
+        self.resolve_target(target)
+
+    def auto_use_card(self, card: Card, player: Player) -> bool:
+        """
+        自动使用进入手牌的 PFWD 卡牌
+
+        Args:
+            card: 进入手牌的卡牌
+            player: 获得方
+
+        Returns:
+            是否自动使用
+        """
+        if card.zone is not Zone.HAND or not card.has_keyword("pfwd"):
+            return False
+        if card.has_keyword("weather") and self.weather_used_turn[player] == self.turn_count:
+            return False
+        card.owner = player
+        card.controller = player
+        if card.has_keyword("weather"):
+            self.weather_used_turn[player] = self.turn_count
+        if card.is_unit:
+            line = self.support_lines[player]
+            if len(line.units) >= line.capacity:
+                return False
+            self.hands[player].remove(card)
+            card.reset_state()
+            card.revealed = False
+            card.deployed_turn = self.turn_count
+            line.add(card)
+            card.zone = Zone.BOARD
+            card.add_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
+            self.targets = self.all_targets()
+            self.emit(Event(EventType.USE, card=card, source=card, player=player, targets=[]))
+            self.emit(
+                Event(
+                    EventType.DEPLOY,
+                    card=card,
+                    player=player,
+                    method=EntryMethod.DEPLOY,
+                )
+            )
+            self._resolve_auto_target()
+            if card.zone is Zone.BOARD:
+                self.emit(
+                    Event(
+                        EventType.ENTER,
+                        card=card,
+                        player=player,
+                        method=EntryMethod.DEPLOY,
+                    )
+                )
+            return True
+        # 指令: 忽略费用和回合限制, 直接触发效果
+        card.zone = Zone.HAND
+        self.targets = self.all_targets()
+        self.emit(
+            Event(
+                EventType.USE,
+                card=card,
+                source=card,
+                player=player,
+                targets=list(self.targets),
+            )
+        )
+        self._resolve_auto_target()
+        if card in self.hands[player].cards:
+            self.hands[player].remove(card)
+        card.zone = Zone.DISCARD
+        if card not in self.discards[player]:
+            self.discards[player].append(card)
+        self.check_victory()
         return True
 
     def move_to_hand(self, card: Card, player: Player) -> bool:
@@ -3009,6 +3122,7 @@ class BattleGround:
         card.zone = Zone.HAND
         card.revealed = False
         if self.hands[player].add(card):
+            self.auto_use_card(card, player)
             return True
         self.discard_card(player, card)
         return False
@@ -3027,7 +3141,19 @@ class BattleGround:
         if choice is None or card not in choice.cards:
             return False
         self.pending_choice = None
-        if choice.destination is Zone.HAND:
+        if choice.next_turn:
+            # 预报选中的天气延迟到下个友方回合开始
+            for holder in (
+                self.hands[choice.player].cards,
+                self.decks[choice.player].cards,
+                self.discards[choice.player],
+            ):
+                if card in holder:
+                    holder.remove(card)
+            card.owner = choice.player
+            card.zone = Zone.REMOVED
+            self.pending_weather[choice.player] = card.card_id
+        elif choice.destination is Zone.HAND:
             self.move_to_hand(card, choice.player)
         else:
             for holder in (
@@ -3626,6 +3752,7 @@ class BattleGround:
                 return card
             card.zone = Zone.HAND
             self.emit(Event(EventType.ADD_TO_HAND, card=card, player=player))
+            self.auto_use_card(card, player)
             return card
         if zone is Zone.DECK:
             deck_cards = self.decks[player].cards
@@ -4116,6 +4243,7 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_289th_gatchina",
     "kards:97th_rifles",
     "kards:card_414th_rifles",
+    "kards:card_forecast",
 ]
 
 

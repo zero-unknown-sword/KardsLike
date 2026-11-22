@@ -14,7 +14,10 @@ from .deployment import KEYWORD as DEPLOYMENT
 from .destruction import KEYWORD as DESTRUCTION
 from .develop import KEYWORD as DEVELOP
 from .exile import KEYWORD as EXILE
+from .forecast import KEYWORD as FORECAST
 from .fury import KEYWORD as FURY
+from .pfwd import KEYWORD as PFWD
+from .weather import KEYWORD as WEATHER
 from .guard import KEYWORD as GUARD
 from .guarded import KEYWORD as GUARDED
 from .immune import KEYWORD as IMMUNE
@@ -32,7 +35,10 @@ KEYWORDS: dict[str, KeywordData] = {
     "destruction": DESTRUCTION,
     "develop": DEVELOP,
     "exile": EXILE,
+    "forecast": FORECAST,
     "fury": FURY,
+    "pfwd": PFWD,
+    "weather": WEATHER,
     "guard": GUARD,
     "guarded": GUARDED,
     "immune": IMMUNE,
