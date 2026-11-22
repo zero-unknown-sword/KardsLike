@@ -144,11 +144,10 @@ def start_forecast(
     slots = CLIMATE_SLOTS.get(kind)
     if not slots:
         return False
-    # 随机三种天气, 每个天气再随机一个同名变体
-    names = random.sample(list(WEATHER_VARIANTS.keys()), 3)
+    # 三个固定槽位: 每个位置从三张同名变体中随机一张
     chosen_ids = [
-        random.choice(WEATHER_VARIANTS[name])
-        for name in names
+        random.choice(WEATHER_VARIANTS[card_id])
+        for card_id in slots
     ]
     choices: list[Card] = []
     for card_id in chosen_ids:
