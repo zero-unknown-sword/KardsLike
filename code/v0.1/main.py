@@ -3058,7 +3058,7 @@ class BattleGround:
             callback,
             next_turn,
         )
-        if self.kind_of(player) is PlayerKind.AI:
+        if self.kind_of(player) is PlayerKind.AI or player is Player.B:
             self.resolve_random_choice()
         return True
 
@@ -4341,7 +4341,6 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_289th_gatchina",
     "kards:97th_rifles",
     "kards:card_414th_rifles",
-    "kards:card_forecast",
     "kards:card_yokosuka_e14y",
     "kards:card_75th_rifle_regiment",
     "kards:card_kawanishi_h8k",
@@ -4428,6 +4427,9 @@ def validate_deck(
         data = cards.get(card_id)
         if data is None:
             errors.append(f"未注册的卡牌: {card_id}")
+            continue
+        if data.country is Country.NEUTRAL:
+            errors.append(f"中立牌不能加入卡组: {data.display_name or data.name}")
             continue
         country = deck_country(data, main, main if ally is None else ally)
         if country not in (main, ally):
