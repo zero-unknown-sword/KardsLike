@@ -5260,7 +5260,7 @@ class BattleUI:
 
     def _on_choice_resolved(self, event: Event, ground: BattleGround) -> None:
         """
-        记录三选一结果, 用于播放卡牌移入手牌的动画
+        记录三选一结果, 三张候选卡一起向左退出
 
         Args:
             event: CHOICE_RESOLVED 事件
@@ -5269,16 +5269,17 @@ class BattleUI:
         card = event.dict.get("card")
         if not isinstance(card, Card):
             return
-        for rect, choice_card in self.choice_rects:
-            if choice_card is card:
-                self.choice_move_anims.append(
-                    (card, rect.copy(), pygame.time.get_ticks())
-                )
-                break
+        now = pygame.time.get_ticks()
+        records = [(item, rect.copy()) for rect, item in self.choice_rects]
+        if not records:
+            records = [(card, pygame.Rect(0, 0, self.card_w, self.card_h))]
+        for item, rect in records:
+            self.choice_move_anims.append((item, rect, now))
+        self.choice_rects.clear()
 
     def _draw_choice_move_anims(self, screen: Surface, ground: BattleGround) -> None:
         """
-        绘制三选一卡牌移入手牌的动画
+        绘制三选一卡牌向左退出的动画
 
         Args:
             screen: 屏幕 Surface
@@ -5287,27 +5288,20 @@ class BattleUI:
         if not self.choice_move_anims:
             return
         now = pygame.time.get_ticks()
-        duration = 300
-        hand = ground.hands[Player.A].cards
-        hand_rects = self.hand_rects(screen, len(hand))
+        duration = 360
         alive: list[tuple[Card, pygame.Rect, int]] = []
         for card, start, start_time in self.choice_move_anims:
             elapsed = now - start_time
             if elapsed >= duration:
                 continue
             alive.append((card, start, start_time))
-            try:
-                index = hand.index(card)
-            except ValueError:
-                continue
-            target = hand_rects[index]
             progress = max(0.0, min(1.0, elapsed / duration))
             ease = 1 - (1 - progress) ** 3
-            x = int(start.x + (target.x - start.x) * ease)
-            y = int(start.y + (target.y - start.y) * ease)
-            w = int(start.width + (target.width - start.width) * ease)
-            h = int(start.height + (target.height - start.height) * ease)
-            self._blit_card(screen, card, pygame.Rect(x, y, w, h))
+            # 全部飞出屏幕左端
+            target_x = -start.width - 24
+            x = int(start.x + (target_x - start.x) * ease)
+            rect = pygame.Rect(x, start.y, start.width, start.height)
+            self._blit_card(screen, card, rect)
         self.choice_move_anims = alive
 
     def _on_move_event(self, event: Event, ground: BattleGround) -> None:
