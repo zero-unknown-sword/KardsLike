@@ -20,8 +20,7 @@ from main import (
     Zone,
 )
 from mods.kards.code.keywords.forecast import KEYWORD as FORECAST
-from mods.kards.code.weather import CLIMATE_IDS
-from main import cards
+from mods.kards.code.weather import start_climate_choice
 
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -33,22 +32,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         event: USE 事件
         ground: 战斗全局参数
     """
-    player: Player = event.player
-    choices: list[Card] = []
-    for kind, card_id in CLIMATE_IDS.items():
-        weather_card = cards.create(card_id)
-        weather_card.owner = player
-        weather_card.controller = player
-        weather_card.zone = Zone.DECK
-        weather_card.keyword_values["weather_kind"] = kind
-        choices.append(weather_card)
-    ground.start_card_choice(
-        player,
-        choices,
-        card,
-        destination=Zone.HAND,
-        title="预报",
-    )
+    start_climate_choice(ground, event.player, card)
 
 
 CARD_DATA = CardData(

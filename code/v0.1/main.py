@@ -456,6 +456,15 @@ class EventType(IntEnum):
     """
     PLAY = USE
     """使用卡牌, USE 的别名"""
+    TARGETED = pygame.event.custom_type()
+    """
+    卡牌被效果指向
+
+    数据:
+        target: 被指向的卡牌
+        source: 指向来源卡牌
+        player: 发起方
+    """
     MOVE = pygame.event.custom_type()
     """
     单位移动
@@ -2933,6 +2942,14 @@ class BattleGround:
         if pending is None or not pending.valid(target):
             return False
         self.pending_target = None
+        self.emit(
+            Event(
+                EventType.TARGETED,
+                target=target,
+                source=pending.source,
+                player=pending.player,
+            )
+        )
         pending.callback(target)
         if pending.finish is not None:
             pending.finish()
@@ -4244,6 +4261,8 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:97th_rifles",
     "kards:card_414th_rifles",
     "kards:card_forecast",
+    "kards:card_yokosuka_e14y",
+    "kards:card_75th_rifle_regiment",
 ]
 
 

@@ -28,6 +28,38 @@ WEATHER_IDS: dict[str, list[str]] = {
 """三种气象分别对应的 2K / 4K / 6K 天气卡"""
 
 
+def start_climate_choice(
+    ground: BattleGround,
+    player: Player,
+    source: Card,
+) -> bool:
+    """
+    选择蓝天 / 薄雾 / 狂风之一
+
+    Args:
+        ground: 战斗全局参数
+        player: 选择方
+        source: 效果来源
+
+    Returns:
+        是否成功开始选择
+    """
+    choices: list[Card] = []
+    for card_id in CLIMATE_IDS.values():
+        card = cards.create(card_id)
+        card.owner = player
+        card.controller = player
+        card.zone = Zone.DECK
+        choices.append(card)
+    return ground.start_card_choice(
+        player,
+        choices,
+        source,
+        destination=Zone.HAND,
+        title="预报",
+    )
+
+
 def set_weather(ground: BattleGround, player: Player, kind: str) -> None:
     """
     记录玩家当前天气
