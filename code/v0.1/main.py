@@ -5842,6 +5842,47 @@ class BattleUI:
             if card.is_unit:
                 self._text(screen, str(card.at), (rect.x + 6, rect.bottom - 26), (20, 90, 30))
                 self._text(screen, str(card.df), (rect.right - 26, rect.bottom - 26), (110, 30, 30))
+        if card.has_keyword("weather"):
+            suffix = card.card_id.rsplit("_", 1)[-1] if card.card_id else ""
+            labels = {
+                "damage": "伤害",
+                "oc": "减费",
+                "enter": "进场",
+                "summon": "召集",
+                "air": "空军",
+                "buff": "增益",
+                "inhibit": "抑制",
+                "enemy_at": "减攻",
+                "suppress": "压制",
+                "draw_discard": "抽弃",
+                "set_stats": "定值",
+                "infantry": "步兵",
+                "random5": "单体5",
+                "retreat": "撤退",
+                "single": "单体",
+            }
+            label = labels.get(suffix)
+            base_ids = {
+                "kards:card_heatwave",
+                "kards:card_jungle_fever",
+                "kards:card_scorching_sun",
+                "kards:card_deluge",
+                "kards:card_torrential_rain",
+                "kards:card_monsoon_rain",
+                "kards:card_thunderstorm",
+                "kards:card_tropical_storm",
+                "kards:card_cyclone",
+            }
+            if label is None and card.card_id not in base_ids:
+                label = suffix[:5]
+            if label:
+                badge = self.small_font.render(label, True, (255, 240, 160))
+                pad = max(3, rect.width // 60)
+                box = badge.get_rect()
+                box.topleft = (rect.x + pad, rect.y + rect.height // 3)
+                box.inflate_ip(pad * 2, pad * 2)
+                pygame.draw.rect(screen, (30, 30, 30), box)
+                screen.blit(badge, (box.x + pad, box.y + pad))
         if card.inhibited:
             # 被抑制的卡牌显示 X 形效果图标
             margin = max(10, rect.width // 5)
