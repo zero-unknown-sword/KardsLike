@@ -63,6 +63,7 @@ WEATHER_VARIANTS: dict[str, list[str]] = {
     ],
     "kards:card_thunderstorm": [
         "kards:card_thunderstorm",
+        "kards:card_thunderstorm_cost",
         "kards:card_thunderstorm_random5",
     ],
     "kards:card_tropical_storm": [
