@@ -1,4 +1,4 @@
-# 开发文档（个人笔记，不纳入版本控制）
+﻿# 开发文档（个人笔记，不纳入版本控制）
 code/v0.1/DEV-NOTES.md
 
 # Python 虚拟环境
@@ -27,3 +27,7 @@ code/v0.1/.cache/
 
 # 完整卡图资源，使用 download_assets.py 获取
 code/v0.1/mods/kards/assets/
+
+# 构建产物通过 GitHub Releases 发布
+game/
+games/
