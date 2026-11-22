@@ -2416,6 +2416,9 @@ class BattleGround:
             source: 光环来源卡牌
         """
         target.add_aura(at=at, keyword=keyword)
+        if keyword == "blitz":
+            # 光环获得闪击时, 同时清除部署当回合不能行动的限制
+            target.remove_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
         source_id = id(source)
         target.aura_sources.add(source_id)
         if source_id not in target.aura_applied:
