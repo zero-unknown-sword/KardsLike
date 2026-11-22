@@ -35,7 +35,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     """
     player = event.player
     set_weather(ground, player, "storm")
-    start_forecast(ground, player, card)
+    start_forecast(ground, player, card, "storm")
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

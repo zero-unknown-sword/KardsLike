@@ -10,18 +10,37 @@ CLIMATE_IDS: dict[str, str] = {
 }
 """三种基础气象对应的卡牌 id"""
 
-WEATHER_POOL: list[str] = [
-    "kards:card_heatwave",
-    "kards:card_jungle_fever",
-    "kards:card_scorching_sun",
-    "kards:card_deluge",
-    "kards:card_torrential_rain",
-    "kards:card_monsoon_rain",
-    "kards:card_thunderstorm",
-    "kards:card_tropical_storm",
-    "kards:card_cyclone",
-]
-"""全部天气卡"""
+CLIMATE_SLOTS: dict[str, list[str]] = {
+    "sunny": [
+        "kards:card_heatwave",
+        "kards:card_jungle_fever",
+        "kards:card_scorching_sun",
+    ],
+    "rain": [
+        "kards:card_deluge",
+        "kards:card_torrential_rain",
+        "kards:card_monsoon_rain",
+    ],
+    "storm": [
+        "kards:card_thunderstorm",
+        "kards:card_tropical_storm",
+        "kards:card_cyclone",
+    ],
+}
+"""每种气象固定三个槽位"""
+
+WEATHER_VARIANTS: dict[str, list[str]] = {
+    "kards:card_heatwave": ["kards:card_heatwave"],
+    "kards:card_jungle_fever": ["kards:card_jungle_fever"],
+    "kards:card_scorching_sun": ["kards:card_scorching_sun"],
+    "kards:card_deluge": ["kards:card_deluge"],
+    "kards:card_torrential_rain": ["kards:card_torrential_rain"],
+    "kards:card_monsoon_rain": ["kards:card_monsoon_rain"],
+    "kards:card_thunderstorm": ["kards:card_thunderstorm"],
+    "kards:card_tropical_storm": ["kards:card_tropical_storm"],
+    "kards:card_cyclone": ["kards:card_cyclone"],
+}
+"""同名天气的变体池, 后续每项补足 3 张"""
 
 
 def start_climate_choice(
@@ -73,6 +92,7 @@ def start_forecast(
     ground: BattleGround,
     player: Player,
     source: Card,
+    kind: str,
 ) -> bool:
     """
     随机发三张天气, 选择一张, 下个友方回合开始加入手牌
@@ -86,7 +106,13 @@ def start_forecast(
         是否成功开始选择
     """
     ground.emit(Event(EventType.FORECAST, player=player, source=source))
-    chosen_ids = random.sample(WEATHER_POOL, 3)
+    slots = CLIMATE_SLOTS.get(kind)
+    if not slots:
+        return False
+    chosen_ids = [
+        random.choice(WEATHER_VARIANTS[card_id])
+        for card_id in slots
+    ]
     choices: list[Card] = []
     for card_id in chosen_ids:
         card = cards.create(card_id)
