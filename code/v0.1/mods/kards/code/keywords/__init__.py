@@ -10,6 +10,7 @@ from .ambush import KEYWORD as AMBUSH
 from .armor import KEYWORD as ARMOR
 from .blitz import KEYWORD as BLITZ
 from .bond import KEYWORD as BOND
+from .climate import KEYWORD as CLIMATE
 from .deployment import KEYWORD as DEPLOYMENT
 from .destruction import KEYWORD as DESTRUCTION
 from .develop import KEYWORD as DEVELOP
@@ -31,6 +32,7 @@ KEYWORDS: dict[str, KeywordData] = {
     "armor": ARMOR,
     "blitz": BLITZ,
     "bond": BOND,
+    "climate": CLIMATE,
     "deployment": DEPLOYMENT,
     "destruction": DESTRUCTION,
     "develop": DEVELOP,

@@ -7843,9 +7843,6 @@ class BattleUI:
         pending = ground.pending_target
         if pending is None:
             return
-        # 单位部署后的选择不加箭头, 只保留目标高亮
-        if pending.source.is_unit:
-            return
         record = self.frame_rects.get(id(pending.source))
         if record is not None:
             start = record[1].center

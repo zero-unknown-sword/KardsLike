@@ -9,7 +9,7 @@ if str(_ROOT) not in sys.path:
 from main import KeywordData
 
 KEYWORD = KeywordData(
-    name="气象",
-    description="天气卡, 触发后可以预报下一种天气",
+    name="天气",
+    description="天气效果, 每回合只能使用一次",
     icon="",
 )
