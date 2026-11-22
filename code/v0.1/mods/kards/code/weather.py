@@ -49,9 +49,20 @@ WEATHER_VARIANTS: dict[str, list[str]] = {
     "kards:card_deluge": ["kards:card_deluge"],
     "kards:card_torrential_rain": ["kards:card_torrential_rain"],
     "kards:card_monsoon_rain": ["kards:card_monsoon_rain"],
-    "kards:card_thunderstorm": ["kards:card_thunderstorm"],
-    "kards:card_tropical_storm": ["kards:card_tropical_storm"],
-    "kards:card_cyclone": ["kards:card_cyclone"],
+    "kards:card_thunderstorm": [
+        "kards:card_thunderstorm",
+        "kards:card_thunderstorm_random5",
+    ],
+    "kards:card_tropical_storm": [
+        "kards:card_tropical_storm",
+        "kards:card_tropical_storm_retreat",
+        "kards:card_tropical_storm_damage",
+    ],
+    "kards:card_cyclone": [
+        "kards:card_cyclone",
+        "kards:card_cyclone_single",
+        "kards:card_cyclone_retreat",
+    ],
 }
 """同名天气的变体池, 后续每项补足 3 张"""
 
@@ -123,7 +134,7 @@ def start_forecast(
     if not slots:
         return False
     chosen_ids = [
-        WEATHER_VARIANTS[card_id][0]
+        random.choice(WEATHER_VARIANTS[card_id])
         for card_id in slots
     ]
     choices: list[Card] = []

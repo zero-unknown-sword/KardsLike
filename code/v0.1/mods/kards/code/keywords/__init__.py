@@ -6,6 +6,7 @@
 
 from main import KeywordData
 
+from .act import KEYWORD as ACT
 from .ambush import KEYWORD as AMBUSH
 from .armor import KEYWORD as ARMOR
 from .blitz import KEYWORD as BLITZ
@@ -28,6 +29,7 @@ from .smoke import KEYWORD as SMOKE
 from .suppressed import KEYWORD as SUPPRESSED
 
 KEYWORDS: dict[str, KeywordData] = {
+    "act": ACT,
     "ambush": AMBUSH,
     "armor": ARMOR,
     "blitz": BLITZ,

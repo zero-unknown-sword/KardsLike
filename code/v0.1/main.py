@@ -473,6 +473,15 @@ class EventType(IntEnum):
         player: 预报方
         source: 预报来源卡牌
     """
+    RETREAT = pygame.event.custom_type()
+    """
+    单位撤退
+
+    数据:
+        card: 撤退的单位
+        player: 控制者
+        source: 来源卡牌
+    """
     MOVE = pygame.event.custom_type()
     """
     单位移动
@@ -3675,6 +3684,37 @@ class BattleGround:
         ):
             result.extend(reversed(line.units))
         return result
+
+    def retreat_unit(self, card: Card, source: Card) -> None:
+        """
+        撤退单位: 前线单位返回支援阵线, 已在支援阵线或支援阵线已满时返回手牌
+
+        撤退不计入行动或移动
+
+        Args:
+            card: 单位
+            source: 效果来源
+        """
+        if not card.is_unit or card.zone is not Zone.BOARD:
+            return
+        player = card.controller
+        line = card.line
+        if line is not None and line.kind is LineKind.FRONT:
+            support = self.support_lines[player]
+            if len(support.units) < support.capacity:
+                line.remove(card)
+                support.add(card)
+                card.zone = Zone.BOARD
+                self.emit(
+                    Event(
+                        EventType.RETREAT,
+                        card=card,
+                        player=player,
+                        source=source,
+                    )
+                )
+                return
+        self.return_unit(card, source)
 
     def return_unit(self, card: Card, source: Card) -> None:
         """
