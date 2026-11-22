@@ -22,7 +22,6 @@ from main import (
     Zone,
 )
 from mods.kards.code.keywords.weather import KEYWORD as WEATHER
-from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """所有单位撤退"""
