@@ -465,6 +465,14 @@ class EventType(IntEnum):
         source: 指向来源卡牌
         player: 发起方
     """
+    FORECAST = pygame.event.custom_type()
+    """
+    友方进行预报
+
+    数据:
+        player: 预报方
+        source: 预报来源卡牌
+    """
     MOVE = pygame.event.custom_type()
     """
     单位移动
@@ -1962,6 +1970,19 @@ class PendingTarget:
     finish: Callable[[], None] | None = None
 
 
+@dataclass
+class ShadowTimer:
+    """
+    影子总部计时器
+
+    Attributes:
+        remaining: 剩余回合数
+        action: 归零时执行的动作
+    """
+    remaining: int
+    action: Callable[[], None]
+
+
 class BattleGround:
     """
     战斗全局参数
@@ -2047,8 +2068,13 @@ class BattleGround:
         """延迟返回手牌的单位与来源"""
         self.pending_isolated: list[tuple[Card, Player]] = []
         """被孤立等待返回的单位与返回回合玩家"""
-        self.pending_weather: dict[Player, str | None] = {Player.A: None, Player.B: None}
-        """预报选中的天气卡 id, 在下个友方回合开始时加入手牌"""
+        self.shadow_hqs: dict[Player, Card | None] = {Player.A: None, Player.B: None}
+        """双方影子总部, 不进入战线也不参与一般计算"""
+        self.shadow_timers: dict[Player, list[ShadowTimer]] = {
+            Player.A: [],
+            Player.B: [],
+        }
+        """影子总部计时器"""
         self.weather_used_turn: dict[Player, int] = {Player.A: -1, Player.B: -1}
         """双方最近一次使用天气的回合序号"""
         self.current_weather: dict[Player, str | None] = {
@@ -2518,10 +2544,8 @@ class BattleGround:
         else:
             self.kredits[player].start_turn()
         self.turns_taken[player] += 1
-        weather_id = self.pending_weather[player]
-        if weather_id is not None:
-            self.pending_weather[player] = None
-            self.give_card(player, weather_id, Zone.HAND)
+        for timer in self.shadow_timers[player]:
+            timer.remaining -= 1
         special_source = self.special_source(player)
         self.draw(player, special_source)
         extra = self.pending_turn_draws[player]
@@ -2554,6 +2578,13 @@ class BattleGround:
         ):
             for unit in line.units:
                 unit.clear_temporary()
+        # 回合结束阶段最后结算影子总部计时器
+        ready = [timer for timer in self.shadow_timers[player] if timer.remaining <= 0]
+        self.shadow_timers[player] = [
+            timer for timer in self.shadow_timers[player] if timer.remaining > 0
+        ]
+        for timer in ready:
+            timer.action()
         self.turn_owner = self.turn_owner.opponent
         self.turn_count += 1
         self.begin_turn()
@@ -3031,6 +3062,50 @@ class BattleGround:
             self.resolve_random_choice()
         return True
 
+    def shadow_hq(self, player: Player) -> Card:
+        """
+        返回玩家的影子总部, 不存在时创建
+
+        Args:
+            player: 玩家
+
+        Returns:
+            影子总部
+        """
+        hq = self.shadow_hqs[player]
+        if hq is None:
+            hq = Card(
+                type=CardType.HQ,
+                cost=0,
+                name="shadow_hq",
+                country=Country.NEUTRAL,
+                at=0,
+                df=1,
+                display_name="影子总部",
+            )
+            hq.owner = player
+            hq.controller = player
+            hq.zone = Zone.REMOVED
+            self.shadow_hqs[player] = hq
+        return hq
+
+    def start_shadow_timer(
+        self,
+        player: Player,
+        action: Callable[[], None],
+        turns: int = 1,
+    ) -> None:
+        """
+        给影子总部添加计时器
+
+        Args:
+            player: 计时器所有者
+            action: 归零时执行的动作
+            turns: 初始回合数
+        """
+        self.shadow_hq(player)
+        self.shadow_timers[player].append(ShadowTimer(turns, action))
+
     def _resolve_auto_target(self) -> None:
         """自动使用卡牌时, 自动选择第一个合法目标"""
         pending = self.pending_target
@@ -3169,7 +3244,13 @@ class BattleGround:
                     holder.remove(card)
             card.owner = choice.player
             card.zone = Zone.REMOVED
-            self.pending_weather[choice.player] = card.card_id
+            card_id = card.card_id
+            owner = choice.player
+
+            def add_weather() -> None:
+                self.give_card(owner, card_id, Zone.HAND)
+
+            self.start_shadow_timer(owner, add_weather)
         elif choice.destination is Zone.HAND:
             self.move_to_hand(card, choice.player)
         else:
@@ -4263,6 +4344,7 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_forecast",
     "kards:card_yokosuka_e14y",
     "kards:card_75th_rifle_regiment",
+    "kards:card_kawanishi_h8k",
 ]
 
 

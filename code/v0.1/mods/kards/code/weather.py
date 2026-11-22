@@ -1,5 +1,5 @@
 """天气与预报的通用逻辑"""
-from main import BattleGround, Card, Player, Zone, cards
+from main import BattleGround, Card, Event, EventType, Player, Zone, cards
 
 CLIMATE_IDS: dict[str, str] = {
     "sunny": "kards:card_blue_sky",
@@ -44,6 +44,7 @@ def start_climate_choice(
     Returns:
         是否成功开始选择
     """
+    ground.emit(Event(EventType.FORECAST, player=player, source=source))
     choices: list[Card] = []
     for card_id in CLIMATE_IDS.values():
         card = cards.create(card_id)
@@ -93,6 +94,7 @@ def start_forecast(
     ids = WEATHER_IDS.get(kind)
     if not ids:
         return False
+    ground.emit(Event(EventType.FORECAST, player=player, source=source))
     choices: list[Card] = []
     for card_id in ids:
         card = cards.create(card_id)

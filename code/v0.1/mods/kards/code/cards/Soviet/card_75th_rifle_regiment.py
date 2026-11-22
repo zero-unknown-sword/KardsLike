@@ -33,9 +33,17 @@ def targeted_by_enemy(card: Card, event: Event, ground: BattleGround) -> bool:
     Returns:
         是否触发
     """
+    source = event.dict.get("source")
+    deployed_unit = (
+        isinstance(source, Card)
+        and source.is_unit
+        and source.deployed_turn == ground.turn_count
+    )
     return (
         event.dict.get("target") is card
         and event.dict.get("player") is not card.controller
+        and isinstance(source, Card)
+        and (source.type is CardType.ORDER or deployed_unit)
     )
 
 
