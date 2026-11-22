@@ -1,4 +1,4 @@
-"""暴雨"""
+"""暴雨(减攻)"""
 import random
 import sys
 from pathlib import Path
