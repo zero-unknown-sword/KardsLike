@@ -3328,6 +3328,7 @@ class BattleGround:
         card.zone = Zone.HAND
         card.revealed = False
         if self.hands[player].add(card):
+            self.emit(Event(EventType.ADD_TO_HAND, card=card, player=player))
             self.auto_use_card(card, player)
             return True
         self.discard_card(player, card)
@@ -5348,6 +5349,7 @@ class BattleUI:
         self.next_discard_anim = 0
         self.next_unit_anim = 0
         ground.add_hook(EventType.DRAW, self._on_draw_event)
+        ground.add_hook(EventType.ADD_TO_HAND, self._on_draw_event)
         ground.add_hook(EventType.ENTER, self._on_enter_event)
         ground.add_hook(EventType.USE, self._on_use_event)
         ground.add_hook(EventType.DISCARD, self._on_discard_event)
@@ -6806,8 +6808,10 @@ class BattleUI:
                 continue
             if target.zone is not Zone.DISCARD:
                 continue
-            if target.damage_amount > 0:
-                self.death_marks.append((str(target.damage_amount), rect.copy(), now))
+            if target.is_unit:
+                self.death_marks.append(
+                    (str(target.damage_amount) if target.damage_amount > 0 else "消灭", rect.copy(), now)
+                )
         self.last_rects = dict(self.frame_rects)
 
     def _draw_death_marks(self, screen: Surface) -> None:
