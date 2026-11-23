@@ -251,7 +251,7 @@ def _fit_cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     """等比裁剪填满目标区域。"""
     target_w, target_h = size
     ratio = max(target_w / image.width, target_h / image.height)
-    resized = image.resize(
+    resized = image.resize(  # type: ignore[reportUnknownMemberType]
         (max(1, int(image.width * ratio)), max(1, int(image.height * ratio))),
         Image.Resampling.LANCZOS,
     )

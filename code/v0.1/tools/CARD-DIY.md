@@ -88,3 +88,33 @@ python tools\card_diy.py --json card.json
 ## 限制
 
 当前版本是独立的 Python 卡面生成器，不是完整复刻 KARDS Card Forge 的 React 编辑器。它保留核心字段、卡图、加粗文本和 PNG 导出，布局为本地实现的 KARDS 风格卡面。
+
+
+## 完整 Card Forge 网页本地副本
+
+如果只靠 Python 简化模板无法还原背景、纸张纹理和完整外观，可以直接使用本地网页副本：
+
+```powershell
+cd D:\Files\Projects\KardsLike\code\v0.1
+python tools\card_forge_server.py
+```
+
+它会启动：
+
+```text
+http://127.0.0.1:8765/KARDS-DIY-GENERATOR/
+```
+
+这是 KARDS Card Forge 的静态网页副本，包含原版编辑器、背景、纸张纹理、字体和卡面模板，不再依赖网络。
+
+文件和模板来源：
+
+```text
+raederhans/KARDS-DIY-GENERATOR
+```
+
+本地副本位于：
+
+```text
+tools/card_forge_web/KARDS-DIY-GENERATOR/
+```
