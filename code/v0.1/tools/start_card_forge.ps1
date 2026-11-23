@@ -1,11 +1,15 @@
 ﻿param(
     [int]$Port = 8765,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$NoWatch
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Join-Path $PSScriptRoot "card_forge_web"
 $Prefix = "KARDS-DIY-GENERATOR"
+$ExportRoot = Join-Path $PSScriptRoot "card_forge_exports"
+$TargetRoot = Join-Path $PSScriptRoot "..\mods\kards\assets\cards\Soviet"
+New-Item -ItemType Directory -Force -Path $ExportRoot | Out-Null
 
 if (-not (Test-Path -LiteralPath (Join-Path $Root "$Prefix\index.html"))) {
     Write-Host "缺少网页副本: $Root" -ForegroundColor Red
@@ -51,6 +55,38 @@ function Send-Response {
     $Stream.Write($headerBytes, 0, $headerBytes.Length)
     if ($Body.Length -gt 0) { $Stream.Write($Body, 0, $Body.Length) }
     $Stream.Flush()
+}
+
+$watchJob = $null
+if (-not $NoWatch) {
+    $downloads = Join-Path $env:USERPROFILE "Downloads"
+    $startTime = Get-Date
+    $watchJob = Start-Job -ScriptBlock {
+        param($Downloads, $ExportRoot, $TargetRoot, $StartTime)
+        $seen = @{}
+        while ($true) {
+            if (Test-Path -LiteralPath $Downloads) {
+                Get-ChildItem -LiteralPath $Downloads -Filter "*.png" -File -ErrorAction SilentlyContinue |
+                    Where-Object {
+                        $_.LastWriteTime -ge $StartTime -and
+                        $_.Name -match "^card_.*choose.*\.png$"
+                    } |
+                    ForEach-Object {
+                        $key = $_.Name + "|" + $_.LastWriteTime.Ticks
+                        if (-not $seen.ContainsKey($key)) {
+                            $seen[$key] = $true
+                            $export = Join-Path $ExportRoot $_.Name
+                            Copy-Item -LiteralPath $_.FullName -Destination $export -Force
+                            if (Test-Path -LiteralPath $TargetRoot) {
+                                Copy-Item -LiteralPath $export -Destination (Join-Path $TargetRoot $_.Name) -Force
+                            }
+                            Write-Host "[导出已同步] $($_.Name)" -ForegroundColor Green
+                        }
+                    }
+            }
+            Start-Sleep -Seconds 2
+        }
+    } -ArgumentList $downloads, $ExportRoot, $TargetRoot, $startTime
 }
 
 $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
@@ -133,4 +169,8 @@ try {
     }
 } finally {
     $listener.Stop()
+    if ($watchJob) {
+        Stop-Job $watchJob -ErrorAction SilentlyContinue
+        Remove-Job $watchJob -Force -ErrorAction SilentlyContinue
+    }
 }

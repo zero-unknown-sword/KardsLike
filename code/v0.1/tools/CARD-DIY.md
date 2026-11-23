@@ -1,4 +1,4 @@
-# KARDS Card Forge 本地网页
+﻿# KARDS Card Forge 本地网页
 
 ## 启动
 
@@ -31,3 +31,29 @@ start_card_forge.ps1                  PowerShell 本地服务器
 ## 说明
 
 这是 KARDS Card Forge 的本地静态副本，包含原版卡面模板、背景、纸张纹理、字体、国家/类型下拉框、文本编辑和导出功能。
+
+## 从网页导出到游戏
+
+启动器会监听 Edge 默认下载目录中新增的 PNG：
+
+`	ext
+card_*choose*.png
+`
+
+在网页里导出并命名为：
+
+`	ext
+card_a_choose1.png
+card_a_choose2.png
+card_expanded_choose1.png
+card_expanded_choose2.png
+card_advanced_choose1.png
+card_advanced_choose2.png
+`
+
+文件会自动复制到：
+
+`	ext
+tools/card_forge_exports/
+mods/kards/assets/cards/Soviet/
+`
