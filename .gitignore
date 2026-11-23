@@ -31,3 +31,7 @@ code/v0.1/mods/kards/assets/
 # 构建产物通过 GitHub Releases 发布
 game/
 games/
+
+code/v0.1/forge_tools/card_forge_source/
+code/v0.1/forge_tools/card_forge_exports/
+dev-tools/

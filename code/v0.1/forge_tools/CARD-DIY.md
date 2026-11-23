@@ -5,7 +5,7 @@
 双击：
 
 ```text
-tools/启动卡牌工坊.cmd
+forge_tools/启动卡牌工坊.cmd
 ```
 
 使用 Windows 自带 PowerShell 启动本地静态网页服务，并优先用 Edge/Chrome 的应用窗口打开。
@@ -54,6 +54,6 @@ card_advanced_choose2.png
 文件会自动复制到：
 
 `	ext
-tools/card_forge_exports/
+forge_tools/card_forge_exports/
 mods/kards/assets/cards/Soviet/
 `
