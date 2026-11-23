@@ -1,1 +1,0 @@
-本地 KARDS Card Forge 静态副本，`python tools/card_forge_server.py` 启动。
