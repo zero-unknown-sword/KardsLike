@@ -344,6 +344,12 @@ class CardTag(StrEnum):
     """构筑外, 不参与初始卡组构筑(TODO: 名称待定)"""
     SPECIAL_SOURCE = "SPECIAL_SOURCE"
     """系统特殊来源"""
+    IN_START = "IN_START"
+    """构筑内卡牌"""
+    KEEP_SHOCK = "KEEP_SHOCK"
+    """不会失去冲击"""
+    UNINHIBITABLE = "UNINHIBITABLE"
+    """不能被抑制"""
 
 
 class EntryMethod(StrEnum):
@@ -889,6 +895,7 @@ class Card:
         procedures: list[Procedure] | None = None,
         tags: list[str] | None = None,
         card_id: str = "",
+        sub_type: str = "",
     ) -> None:
         """
         创建卡牌
@@ -914,6 +921,8 @@ class Card:
         """
         self.type: CardType = type
         self.card_id: str = card_id
+        self.sub_type: str = sub_type
+        self.last_trigger_turn: int = -1
         self._cost: IntAttr = IntAttr(cost, "cost", self)
         self.name: str = name
         self.country: Country = country
@@ -1687,6 +1696,7 @@ class CardData:
     effect: Any | None = None
     procedures: list[Procedure] = field(default_factory=_empty_procedures)
     tags: list[str] = field(default_factory=_empty_tags)
+    sub_type: str = ""
 
     def __post_init__(self) -> None:
         """把注册关键词统一为 Keyword 实例, 并提取数值/流亡目标"""
@@ -1883,6 +1893,7 @@ def build_card(data: CardData) -> Card:
         procedures=procedures,
         tags=list(data.tags),
         card_id=data.card_id,
+        sub_type=data.sub_type,
     )
 
 # ==================== 战斗核心 ====================
@@ -2118,6 +2129,11 @@ class BattleGround:
         """行动判定钩子, 返回 None 时使用默认标签规则"""
         self.winner: Player | None = None
         """已分出胜负时的胜方"""
+        self.last_destroyed_ground: dict[Player, Card | None] = {
+            Player.A: None,
+            Player.B: None,
+        }
+        """每方最后被消灭的陆军单位"""
         deck_a.hq.line = self.support_lines[Player.A]
         deck_b.hq.line = self.support_lines[Player.B]
 
@@ -2451,6 +2467,12 @@ class BattleGround:
         if card.line is not None:
             card.line.remove(card)
         player = card.controller
+        if card.is_unit and card.type in (
+            CardType.INFANTRY,
+            CardType.ARTILLERY,
+            CardType.TANK,
+        ):
+            self.last_destroyed_ground[player] = card
         if card not in self.discards[player]:
             self.discards[player].append(card)
         card.zone = Zone.DISCARD
@@ -2463,6 +2485,67 @@ class BattleGround:
         )
         card.update(leave_event, self)
         self.emit(leave_event)
+
+    def draw_from_deck(self, player: Player, card: Card, source: Card) -> bool:
+        """
+        从卡组中抽出指定卡牌
+
+        Args:
+            player: 抽牌方
+            card: 要抽出的卡牌
+            source: 抽牌来源
+
+        Returns:
+            是否成功抽到
+        """
+        deck = self.decks[player].cards
+        if card not in deck:
+            return False
+        deck.remove(card)
+        if self.hands[player].add(card):
+            card.zone = Zone.HAND
+            card.revealed = False
+            self.emit(Event(EventType.DRAW, card=card, player=player, source=source))
+            return True
+        self.discard_card(player, card)
+        return False
+
+    def draw_filtered(
+        self,
+        player: Player,
+        predicate: Callable[[Card], bool],
+        count: int,
+        source: Card,
+        random_pick: bool = True,
+    ) -> list[Card]:
+        """
+        按条件从卡组中抽牌
+
+        Args:
+            player: 抽牌方
+            predicate: 筛选条件
+            count: 抽取数量
+            source: 抽牌来源
+            random_pick: 是否随机选择, 否则取满足条件的最低费
+
+        Returns:
+            抽到的卡牌
+        """
+        drawn: list[Card] = []
+        for _ in range(count):
+            candidates = [
+                item for item in self.decks[player].cards if predicate(item)
+            ]
+            if not candidates:
+                break
+            if random_pick:
+                card = random.choice(candidates)
+            else:
+                card = min(candidates, key=lambda item: (item.cost, item.name))
+            if not self.draw_from_deck(player, card, source):
+                break
+            drawn.append(card)
+        return drawn
 
     def add_hook(self, trigger: "EventType | str | int", handler: Callable[[Event, "BattleGround"], None]) -> None:
         """
@@ -3707,6 +3790,8 @@ class BattleGround:
             card: 单位
             source: 效果来源
         """
+        if card.has_tag(CardTag.UNINHIBITABLE):
+            return
         card.inhibited = True
         card.keywords.clear()
         card.aura_keywords.clear()
@@ -4427,6 +4512,22 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_44th_silesia",
     "kards:card_909th_roslavl",
     "kards:card_air_corps_ferrying",
+    "kards:card_3rd_morskoi_pekhoty",
+    "kards:card_178th_guard_rifles",
+    "kards:card_55th_rifles",
+    "kards:card_ilyushin_il10",
+    "kards:card_little_cobra",
+    "kards:card_740th_rifle_regiment",
+    "kards:card_4th_guards_rifles",
+    "kards:card_kv1_1941",
+    "kards:card_kv1_1939",
+    "kards:card_t3485_1945",
+    "kards:card_2nd_west_africa",
+    "kards:card_no_46_commando",
+    "kards:card_m3a3_honey",
+    "kards:card_the_holy_boys",
+    "kards:card_hampshire_regiment",
+    "kards:card_su100",
 ]
 
 
@@ -4563,6 +4664,7 @@ def make_deck(pool: list[str], owner: Player, country: Country | None = None) ->
     for card in deck_cards:
         card.owner = owner
         card.controller = owner
+        card.add_tag(CardTag.IN_START)
     return Deck(deck_cards, hq)
 
 

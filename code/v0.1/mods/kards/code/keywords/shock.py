@@ -18,6 +18,8 @@ def lose_shock(card, event, ground) -> None:
         event: 事件
         ground: 战斗全局参数
     """
+    if card.has_tag("KEEP_SHOCK"):
+        return
     if "shock" in card.keywords:
         card.keywords.remove("shock")
 
