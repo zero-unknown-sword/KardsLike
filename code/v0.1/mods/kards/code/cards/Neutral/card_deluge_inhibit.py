@@ -21,7 +21,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
@@ -47,7 +46,7 @@ CARD_DATA = CardData(
     text="抑制一个单位，抽 1 张牌。",
     art="deluge_inhibit.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

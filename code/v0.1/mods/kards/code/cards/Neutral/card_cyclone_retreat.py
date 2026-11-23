@@ -21,7 +21,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """所有单位撤退"""
@@ -37,7 +36,7 @@ CARD_DATA = CardData(
     text="使所有单位撤退。",
     art="cyclone_retreat.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

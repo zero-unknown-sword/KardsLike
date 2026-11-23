@@ -21,7 +21,6 @@ from main import (
     Zone,
 )
 import random
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -45,7 +44,7 @@ CARD_DATA = CardData(
     text="增加 6 点防御力，随机分配至所有友方目标。",
     art="deluge.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

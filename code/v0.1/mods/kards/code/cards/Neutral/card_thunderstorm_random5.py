@@ -20,7 +20,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -42,7 +41,7 @@ CARD_DATA = CardData(
     text="随机对 1 个敌方单位造成 5 点伤害。",
     art="thunderstorm_random5.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

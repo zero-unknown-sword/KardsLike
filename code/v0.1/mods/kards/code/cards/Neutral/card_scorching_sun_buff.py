@@ -21,7 +21,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import add_end_cleanup, add_turn_hook, start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -39,7 +38,7 @@ CARD_DATA = CardData(
     text="使所有友方单位获得 +3+2。",
     art="scorching_sun_buff.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

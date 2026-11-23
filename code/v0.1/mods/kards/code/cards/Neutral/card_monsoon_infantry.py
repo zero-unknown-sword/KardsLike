@@ -22,7 +22,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -47,7 +46,7 @@ CARD_DATA = CardData(
     text="所有友方步兵 +2 攻击力，+2 防御力，并能再次行动。",
     art="monsoon_infantry.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

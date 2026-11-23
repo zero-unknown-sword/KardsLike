@@ -21,7 +21,6 @@ from main import (
     Zone,
 )
 import random
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -45,7 +44,7 @@ CARD_DATA = CardData(
     text="造成 3 点伤害，随机分配至所有敌方目标。",
     art="thunderstorm.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

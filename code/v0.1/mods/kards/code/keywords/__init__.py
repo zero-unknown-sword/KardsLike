@@ -6,12 +6,10 @@
 
 from main import KeywordData
 
-from .act import KEYWORD as ACT
 from .ambush import KEYWORD as AMBUSH
 from .armor import KEYWORD as ARMOR
 from .blitz import KEYWORD as BLITZ
 from .bond import KEYWORD as BOND
-from .climate import KEYWORD as CLIMATE
 from .deployment import KEYWORD as DEPLOYMENT
 from .destruction import KEYWORD as DESTRUCTION
 from .develop import KEYWORD as DEVELOP
@@ -19,7 +17,6 @@ from .exile import KEYWORD as EXILE
 from .forecast import KEYWORD as FORECAST
 from .fury import KEYWORD as FURY
 from .pfwd import KEYWORD as PFWD
-from .weather import KEYWORD as WEATHER
 from .guard import KEYWORD as GUARD
 from .guarded import KEYWORD as GUARDED
 from .immune import KEYWORD as IMMUNE
@@ -29,12 +26,10 @@ from .smoke import KEYWORD as SMOKE
 from .suppressed import KEYWORD as SUPPRESSED
 
 KEYWORDS: dict[str, KeywordData] = {
-    "act": ACT,
     "ambush": AMBUSH,
     "armor": ARMOR,
     "blitz": BLITZ,
     "bond": BOND,
-    "climate": CLIMATE,
     "deployment": DEPLOYMENT,
     "destruction": DESTRUCTION,
     "develop": DEVELOP,
@@ -42,7 +37,6 @@ KEYWORDS: dict[str, KeywordData] = {
     "forecast": FORECAST,
     "fury": FURY,
     "pfwd": PFWD,
-    "weather": WEATHER,
     "guard": GUARD,
     "guarded": GUARDED,
     "immune": IMMUNE,

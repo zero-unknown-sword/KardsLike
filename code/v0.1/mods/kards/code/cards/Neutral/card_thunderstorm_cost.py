@@ -18,7 +18,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -40,7 +39,7 @@ CARD_DATA = CardData(
     text="随机使 1 张敌方手牌获得 +1 花费，随机使 1 张友方卡牌获得 -1 花费。",
     art="thunderstorm_cost.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

@@ -21,7 +21,6 @@ from main import (
     Zone,
 )
 from mods.kards.code.keywords.pfwd import KEYWORD as PFWD
-from mods.kards.code.keywords.climate import KEYWORD as CLIMATE
 from mods.kards.code.weather import set_weather, start_forecast
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -45,7 +44,7 @@ CARD_DATA = CardData(
     text="自动使用。晴天。预报：下个友方回合获得一张晴天天气。",
     art="blue_sky.png",
     rare=Rarity.STANDARD,
-    keywords=[PFWD, CLIMATE],
+    keywords=[PFWD],
     procedures=[
         Procedure(
             EventType.USE,

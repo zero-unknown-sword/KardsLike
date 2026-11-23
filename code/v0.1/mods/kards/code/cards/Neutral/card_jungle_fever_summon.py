@@ -22,7 +22,6 @@ from main import (
     Rarity,
     cards,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import add_end_cleanup, add_turn_hook, start_climate_choice
 
 def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
@@ -59,7 +58,7 @@ CARD_DATA = CardData(
     text="将 1 个友方单位的复制加入支援阵线。将其压制，直到回合结束。",
     art="jungle_fever_summon.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

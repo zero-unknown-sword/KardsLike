@@ -21,7 +21,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import add_end_cleanup, add_turn_hook, start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -54,7 +53,7 @@ CARD_DATA = CardData(
     text="本回合，友方单位部署时，使其随机对 1 个敌方目标造成等同于其攻击力的伤害。",
     art="heatwave_damage.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

@@ -20,7 +20,6 @@ from main import (
     Rarity,
     Zone,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -43,7 +42,7 @@ CARD_DATA = CardData(
     text="抽 3 张牌，对友方总部造成等同于手牌数的伤害。",
     art="cyclone.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

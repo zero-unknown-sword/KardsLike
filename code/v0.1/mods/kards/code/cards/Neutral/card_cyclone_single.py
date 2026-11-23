@@ -21,7 +21,6 @@ from main import (
     LineKind,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
@@ -67,7 +66,7 @@ CARD_DATA = CardData(
     text="对 1 个敌方单位造成 6 点伤害，对相邻目标造成 2 点伤害。",
     art="cyclone_single.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

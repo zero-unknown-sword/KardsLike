@@ -21,7 +21,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import add_end_cleanup, add_turn_hook, start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
@@ -56,7 +55,7 @@ CARD_DATA = CardData(
     text="本回合，友方单位部署或加入时，使其获得 +2 攻击力和闪击；回合结束时压制这些单位。",
     art="jungle_fever_enter.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,

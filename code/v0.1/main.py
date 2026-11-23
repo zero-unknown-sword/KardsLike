@@ -2912,7 +2912,7 @@ class BattleGround:
             return False
         if card not in self.hands[player].cards:
             return False
-        if card.has_keyword("weather") and self.weather_used_turn[player] == self.turn_count:
+        if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
             return False
         effective_cost = card.effective_cost
         if not self.kredits[player].can_afford(effective_cost):
@@ -2975,7 +2975,7 @@ class BattleGround:
             return True
         if card.type is CardType.ORDER:
             self.kredits[player].spend(effective_cost)
-            if card.has_keyword("weather"):
+            if card.sub_type == "weather":
                 self.weather_used_turn[player] = self.turn_count
             self.check_bond(player, card)
             self.apply_intel(player, card)
@@ -3244,11 +3244,11 @@ class BattleGround:
         """
         if card.zone is not Zone.HAND or not card.has_keyword("pfwd"):
             return False
-        if card.has_keyword("weather") and self.weather_used_turn[player] == self.turn_count:
+        if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
             return False
         card.owner = player
         card.controller = player
-        if card.has_keyword("weather"):
+        if card.sub_type == "weather":
             self.weather_used_turn[player] = self.turn_count
         if card.is_unit:
             line = self.support_lines[player]
@@ -6653,7 +6653,7 @@ class BattleUI:
             card: 候选卡牌
             rect: 卡牌矩形
         """
-        if not card.has_keyword("weather"):
+        if card.sub_type != "weather":
             return
         font_size = max(12, rect.width // 14)
         font = load_font(font_size)

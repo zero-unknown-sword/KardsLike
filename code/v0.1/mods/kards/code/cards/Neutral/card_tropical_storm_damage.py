@@ -20,7 +20,6 @@ from main import (
     Procedure,
     Rarity,
 )
-from mods.kards.code.keywords.weather import KEYWORD as WEATHER
 from mods.kards.code.weather import start_climate_choice
 
 def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
@@ -63,7 +62,7 @@ CARD_DATA = CardData(
     text="对 1 个敌方目标造成 3 点伤害。随机对敌方单位重复 2 次，每次造成的伤害 -1。",
     art="tropical_storm_damage.png",
     rare=Rarity.STANDARD,
-    keywords=[WEATHER],
+    sub_type="weather",
     procedures=[
         Procedure(
             EventType.USE,
