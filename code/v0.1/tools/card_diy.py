@@ -261,11 +261,23 @@ def _fit_cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 
 def _paper_texture() -> Image.Image:
-    """生成轻微纸张纹理。"""
-    image = Image.new("RGB", (CARD_W, CARD_H), PAPER)
-    noise = Image.effect_noise((CARD_W, CARD_H), 12).convert("L")
-    overlay = Image.new("RGB", (CARD_W, CARD_H), (196, 190, 171))
-    return Image.composite(overlay, image, noise)
+    """优先使用网页版自带的纸张纹理。"""
+    texture = (
+        Path(__file__).resolve().parent
+        / "card_forge_web"
+        / "KARDS-DIY-GENERATOR"
+        / "textures"
+        / "ambientcg-paper001-960.png"
+    )
+    if texture.is_file():
+        try:
+            paper = Image.open(texture).convert("RGB")
+            paper = _fit_cover(paper, (CARD_W, CARD_H))
+            overlay = Image.new("RGB", (CARD_W, CARD_H), PAPER)
+            return Image.blend(paper, overlay, 0.55)
+        except OSError:
+            pass
+    return Image.new("RGB", (CARD_W, CARD_H), PAPER)
 
 
 def render_card(spec: CardSpec) -> Image.Image:
@@ -417,7 +429,24 @@ class CardDiyApp:
             ("扩展包", "set"),
         ]:
             ttk.Label(left, text=label).grid(row=row, column=0, sticky="w", pady=2)
-            ttk.Entry(left, textvariable=self.vars[key], width=28).grid(row=row, column=1, pady=2)
+            if key == "type":
+                ttk.Combobox(
+                    left,
+                    textvariable=self.vars[key],
+                    values=list(TYPE_NAMES),
+                    state="readonly",
+                    width=26,
+                ).grid(row=row, column=1, pady=2)
+            elif key == "nation":
+                ttk.Combobox(
+                    left,
+                    textvariable=self.vars[key],
+                    values=["Soviet", "Britain", "USA", "Germany", "Japan", "France", "Italy", "Poland", "Finland", "Anzac", "Neutral"],
+                    state="readonly",
+                    width=26,
+                ).grid(row=row, column=1, pady=2)
+            else:
+                ttk.Entry(left, textvariable=self.vars[key], width=28).grid(row=row, column=1, pady=2)
             row += 1
 
         ttk.Label(left, text="卡牌文本").grid(row=row, column=0, sticky="nw", pady=2)
@@ -435,6 +464,7 @@ class CardDiyApp:
 
         self.preview_label = ttk.Label(right)
         self.preview_label.pack(fill="both", expand=True)
+        self.preview_label.bind("<Button-1>", lambda event: self.text_widget.focus_set())
 
     def spec(self) -> CardSpec:
         """从界面读取卡牌数据。"""
