@@ -6,6 +6,7 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from mods.kards.code.keywords.destruction import KEYWORD as DESTRUCTION
 from main import (
     BattleGround,
     Card,
@@ -50,5 +51,6 @@ CARD_DATA = CardData(
     at=4,
     df=3,
     operation_cost=1,
+    keywords=[DESTRUCTION],
     procedures=[Procedure(EventType.LEAVE, destroyed, action)],
 )

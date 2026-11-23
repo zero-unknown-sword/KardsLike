@@ -18,6 +18,7 @@ from main import (
     Procedure,
     Rarity,
 )
+from mods.kards.code.keywords.destruction import KEYWORD as DESTRUCTION
 from mods.kards.code.keywords.guard import KEYWORD as GUARD
 
 
@@ -50,6 +51,6 @@ CARD_DATA = CardData(
     at=3,
     df=4,
     operation_cost=1,
-    keywords=[GUARD],
+    keywords=[GUARD, DESTRUCTION],
     procedures=[Procedure(EventType.LEAVE, destroyed, action)],
 )
