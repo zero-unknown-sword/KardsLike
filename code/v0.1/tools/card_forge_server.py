@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import socket
 import socketserver
 import threading
 import webbrowser
@@ -15,8 +16,18 @@ PREFIX = "/KARDS-DIY-GENERATOR/"
 class Handler(http.server.SimpleHTTPRequestHandler):
     """把静态副本按原站路径提供。"""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+    def __init__(
+        self,
+        request: socket.socket,
+        client_address: tuple[str, int],
+        server: socketserver.BaseServer,
+    ) -> None:
+        super().__init__(
+            request,
+            client_address,
+            server,
+            directory=str(ROOT),
+        )
 
     def do_GET(self) -> None:
         if self.path == "/":
