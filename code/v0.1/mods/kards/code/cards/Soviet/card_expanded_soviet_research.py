@@ -32,8 +32,24 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     def advanced() -> None:
         ground.give_card(player, "kards:card_advanced_soviet_research", Zone.HAND)
 
-    standard_card = cards.create("kards:card_standard_ammo")
-    advanced_card = cards.create("kards:card_advanced_soviet_research")
+    standard_card = Card(
+        type=CardType.ORDER,
+        cost=6,
+        country=Country.SOVIET,
+        name="expanded_choose_standard",
+        display_name="扩展苏联研发",
+        text="将 1 张“标准弹药”加入手中。",
+        art="card_expanded_choose1.png",
+    )
+    advanced_card = Card(
+        type=CardType.ORDER,
+        cost=6,
+        country=Country.SOVIET,
+        name="expanded_choose_advanced",
+        display_name="扩展苏联研发",
+        text="将 1 张“高级苏联研发”加入手中。",
+        art="card_expanded_choose2.png",
+    )
     ground.start_choose(
         player,
         card,

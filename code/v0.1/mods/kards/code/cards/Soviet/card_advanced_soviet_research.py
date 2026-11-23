@@ -33,9 +33,24 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         for _ in range(3):
             ground.give_card(player, "kards:card_stalins_organ", Zone.HAND)
 
-    armor_card = cards.create("kards:card_sloped_armor")
-    organ_card = cards.create("kards:card_stalins_organ")
-    organ_card.text = "获取 3 张斯大林管风琴。"
+    armor_card = Card(
+        type=CardType.ORDER,
+        cost=9,
+        country=Country.SOVIET,
+        name="advanced_choose_armor",
+        display_name="高级苏联研发",
+        text="将 1 张“倾斜装甲”加入手中。",
+        art="card_advanced_choose1.png",
+    )
+    organ_card = Card(
+        type=CardType.ORDER,
+        cost=9,
+        country=Country.SOVIET,
+        name="advanced_choose_organs",
+        display_name="高级苏联研发",
+        text="将 3 张“斯大林管风琴”加入手中。",
+        art="card_advanced_choose2.png",
+    )
     ground.start_choose(
         player,
         card,

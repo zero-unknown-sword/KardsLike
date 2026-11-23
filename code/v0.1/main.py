@@ -4636,7 +4636,7 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_the_holy_boys",
     "kards:card_hampshire_regiment",
     "kards:card_su100",
-    "kards:card_expanded_soviet_research",
+    "kards:card_soviet_military_research",
 ]
 
 
