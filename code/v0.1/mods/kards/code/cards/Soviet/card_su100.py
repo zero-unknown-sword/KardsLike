@@ -23,7 +23,7 @@ from mods.kards.code.keywords.blitz import KEYWORD as BLITZ
 def damaged(card: Card, event: Event, ground: BattleGround) -> bool:
     """自身受伤且尚未获得加成"""
     return (
-        event.card is card
+        event.dict.get("target") is card
         and card.df < card.max_df
         and not card.has_tag("SU100_BONUS")
     )
