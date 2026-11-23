@@ -3796,6 +3796,10 @@ class BattleGround:
         card.keywords.clear()
         card.aura_keywords.clear()
         card.procedures.clear()
+        card.tags.clear()
+        card.base_tags.clear()
+        card.keyword_values.clear()
+        card.effect = None
         card.at = card.initial_at
         card.max_df = card.initial_df
         card.df = min(card.df, card.max_df)
