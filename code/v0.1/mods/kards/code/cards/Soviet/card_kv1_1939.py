@@ -6,20 +6,43 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from main import CardData, CardType, Country, Rarity
+from main import (
+    BattleGround,
+    Card,
+    CardData,
+    CardType,
+    Country,
+    DamageType,
+    Event,
+    EventType,
+    Procedure,
+    Rarity,
+)
 from mods.kards.code.keywords.armor import KEYWORD as ARMOR
-from mods.kards.code.keywords.guard import KEYWORD as GUARD
+
+
+def enemy_drew(card: Card, event: Event, ground: BattleGround) -> bool:
+    """敌方抽牌"""
+    return event.player is card.controller.opponent
+
+
+def action(card: Card, event: Event, ground: BattleGround) -> None:
+    """对敌方总部造成 2 点伤害"""
+    enemy = card.controller.opponent
+    ground.damage(ground.hqs[enemy], 2, card, DamageType.NONE)
+
 
 CARD_DATA = CardData(
     type=CardType.TANK,
     country=Country.SOVIET,
     cost=6,
     display_name="KV-1 1939",
-    text="守护。重甲 1。",
+    text="重甲 1。敌方每抽 1 张牌，对其总部造成 2 点伤害。",
     art="kv1_1939.png",
-    rare=Rarity.ELITE,
-    at=5,
-    df=7,
+    rare=Rarity.SPECIAL,
+    at=3,
+    df=6,
     operation_cost=2,
-    keywords=[GUARD, ARMOR.with_val(1)],
+    keywords=[ARMOR.with_val(1)],
+    procedures=[Procedure(EventType.DRAW, enemy_drew, action)],
 )
