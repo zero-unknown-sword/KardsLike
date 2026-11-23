@@ -6761,14 +6761,6 @@ class BattleUI:
         overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         overlay.fill((8, 8, 6, 80))
         screen.blit(overlay, (0, 0))
-        self._text(
-            screen,
-            "抉择",
-            (screen.get_width() // 2, center_y - height // 2 - 44),
-            (235, 220, 175),
-            center=True,
-            font=self.big_font,
-        )
         self.choose_rects = []
         for index, option in enumerate(request.options[:2]):
             target_x = screen.get_width() // 2 + (index * 2 - 1) * (width + gap) // 2
