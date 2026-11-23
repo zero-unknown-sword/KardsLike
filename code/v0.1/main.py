@@ -2947,7 +2947,9 @@ class BattleGround:
             self.check_bond(player, card)
             card.owner = player
             card.controller = player
+            operation_cost = card.operation_cost
             card.reset_state()
+            card.operation_cost = operation_cost
             card.revealed = False
             card.deployed_turn = self.turn_count
             self.hands[player].remove(card)
@@ -3358,7 +3360,9 @@ class BattleGround:
             if len(line.units) >= line.capacity:
                 return False
             self.hands[player].remove(card)
+            operation_cost = card.operation_cost
             card.reset_state()
+            card.operation_cost = operation_cost
             card.revealed = False
             card.deployed_turn = self.turn_count
             line.add(card)

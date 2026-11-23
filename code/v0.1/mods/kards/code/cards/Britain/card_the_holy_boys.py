@@ -36,7 +36,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     """所有友方单位 +1+1"""
     card.last_trigger_turn = ground.turn_count
     for unit in ground.units_in_effect_order(card.controller):
-        if unit.controller is card.controller:
+        if unit.controller is card.controller and unit.zone is Zone.BOARD:
             ground.buff(unit, at=1, df=1)
 
 
