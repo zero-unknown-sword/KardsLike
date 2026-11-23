@@ -1,4 +1,4 @@
-# KARDS DIY · Python 本地版
+﻿# KARDS DIY · Python 本地版
 
 本地卡牌生成器，不依赖浏览器和 Node.js。
 
@@ -118,3 +118,15 @@ raederhans/KARDS-DIY-GENERATOR
 ```text
 tools/card_forge_web/KARDS-DIY-GENERATOR/
 ```
+
+## 不安装 Python 的启动方式
+
+直接双击：
+
+`	ext
+tools/启动卡牌工坊.cmd
+`
+
+使用 Windows 自带的 PowerShell 启动本地网页服务，并优先用 Edge/Chrome 的应用窗口打开 KARDS Card Forge。
+
+不需要安装 Python、Node.js 或联网。
