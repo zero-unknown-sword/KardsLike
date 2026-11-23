@@ -269,74 +269,79 @@ def _paper_texture() -> Image.Image:
 
 
 def render_card(spec: CardSpec) -> Image.Image:
-    """根据输入数据生成一张 KARDS 风格卡面。"""
+    """按 KARDS 卡面几何生成一张卡。"""
     image = _paper_texture().convert("RGBA")
     draw = ImageDraw.Draw(image)
-    title_font = _font(BOLD_FONT, 38)
-    body_regular = _font(DEFAULT_FONT, 26)
-    body_bold = _font(BOLD_FONT, 26)
-    small = _font(DEFAULT_FONT, 18)
-    cost_font = _font(BOLD_FONT, 54)
-    stat_font = _font(BOLD_FONT, 40)
+    unit = spec.type not in ("order", "countermeasure", "hq")
+    title_font = _font(BOLD_FONT, 40 if not unit else 38)
+    body_regular = _font(DEFAULT_FONT, 24)
+    body_bold = _font(BOLD_FONT, 24)
+    small = _font(DEFAULT_FONT, 15)
+    cost_font = _font(BOLD_FONT, 52)
+    stat_font = _font(BOLD_FONT, 38)
 
     # 卡框
-    _rounded(draw, (6, 6, CARD_W - 6, CARD_H - 6), 22, None, (96, 89, 72), 4)
-    _rounded(draw, (13, 13, CARD_W - 13, CARD_H - 13), 17, None, (236, 230, 208), 2)
+    _rounded(draw, (4, 4, CARD_W - 4, CARD_H - 4), 20, None, (91, 86, 70), 4)
+    _rounded(draw, (11, 11, CARD_W - 11, CARD_H - 11), 16, None, (239, 234, 214), 2)
 
-    # 顶部费用牌
-    _rounded(draw, (22, 20, 96, 100), 10, (54, 57, 52), (24, 26, 23), 2)
-    draw.text((59, 60), str(max(0, spec.cost)), font=cost_font, fill=LIGHT, anchor="mm")
-
-    # 右上角类型/阵营
-    kind_name = TYPE_NAMES.get(spec.type, spec.type)
-    draw.text((CARD_W - 34, 32), kind_name, font=small, fill=MUTED, anchor="ra")
-    draw.text((CARD_W - 34, 56), spec.nation, font=small, fill=MUTED, anchor="ra")
-    _rounded(
-        draw,
-        (CARD_W - 108, 78, CARD_W - 34, 96),
-        8,
-        (231, 225, 203),
-        (145, 137, 116),
-        1,
-    )
-    draw.text((CARD_W - 71, 87), spec.rarity, font=_font(DEFAULT_FONT, 12), fill=INK, anchor="mm")
-
-    # 插画区域
-    art_box = (28, 112, CARD_W - 28, 470)
-    _rounded(draw, art_box, 6, (62, 66, 55), (40, 42, 35), 3)
+    # 卡图
+    art_box = (12, 99, 488, 525) if unit else (12, 13, 488, 489)
+    _rounded(draw, art_box, 6, (55, 59, 50), (39, 42, 35), 2)
     if spec.art:
         art = _load_art(Path(spec.art))
         if art is not None:
-            art = _fit_cover(art, (art_box[2] - art_box[0] - 8, art_box[3] - art_box[1] - 8))
-            image.paste(art, (art_box[0] + 4, art_box[1] + 4))
-    # 插画暗角
-    vignette = Image.new("L", (CARD_W, CARD_H), 0)
-    vdraw = ImageDraw.Draw(vignette)
-    vdraw.rectangle(art_box, fill=0)
-    for offset in range(40):
-        alpha = int(80 * (1 - offset / 40))
-        vdraw.rectangle(
-            (art_box[0] + offset, art_box[1] + offset, art_box[2] - offset, art_box[3] - offset),
-            outline=alpha,
-            width=1,
-        )
-    image = Image.composite(Image.new("RGBA", image.size, (0, 0, 0, 80)), image, vignette)
+            art = _fit_cover(art, (art_box[2] - art_box[0] - 6, art_box[3] - art_box[1] - 6))
+            image.paste(art, (art_box[0] + 3, art_box[1] + 3))
     draw = ImageDraw.Draw(image)
+
+    # 费用牌
+    if unit:
+        _rounded(draw, (12, 13, 90, 91), 7, (61, 64, 57), (30, 32, 27), 2)
+        draw.text((51, 52), str(max(0, spec.cost)), font=cost_font, fill=LIGHT, anchor="mm")
+        _rounded(draw, (98, 13, 488, 99), 10, (226, 220, 201), (154, 146, 124), 1)
+    else:
+        _rounded(draw, (12, 13, 98, 99), 7, (61, 64, 57), (30, 32, 27), 2)
+        draw.text((55, 56), str(max(0, spec.cost)), font=cost_font, fill=LIGHT, anchor="mm")
+
+    # 国家
+    draw.text((450, 48), spec.nation, font=small, fill=MUTED, anchor="mm")
+    draw.text((450, 24), TYPE_NAMES.get(spec.type, spec.type), font=small, fill=MUTED, anchor="mm")
+
+    # 类型图标
+    icon_box = (208, 473, 292, 555) if unit else (222, 448, 278, 504)
+    _rounded(draw, icon_box, 8, (208, 202, 182), (142, 135, 115), 1)
+    glyph = {
+        "infantry": "步",
+        "tank": "坦",
+        "artillery": "炮",
+        "fighter": "战",
+        "bomber": "轰",
+        "order": "令",
+        "countermeasure": "反",
+    }.get(spec.type, "?")
+    draw.text(
+        ((icon_box[0] + icon_box[2]) // 2, (icon_box[1] + icon_box[3]) // 2),
+        glyph,
+        font=_font(BOLD_FONT, 30),
+        fill=INK,
+        anchor="mm",
+    )
 
     # 标题
     title = spec.title.strip() or "未命名卡牌"
-    title_font = _font(BOLD_FONT, 34)
-    while draw.textlength(title, font=title_font) > CARD_W - 80 and len(title) > 1:
+    max_title = 360 if unit else 410
+    while draw.textlength(title, font=title_font) > max_title and len(title) > 1:
         title = title[:-1]
-    draw.text((CARD_W // 2, 482), title, font=title_font, fill=INK, anchor="ma")
+    title_pos = (293, 56) if unit else (250, 538)
+    draw.text(title_pos, title, font=title_font, fill=INK, anchor="mm")
 
     # 正文
-    body_box = (44, 536, CARD_W - 44, 642)
-    _rounded(draw, (30, 528, CARD_W - 30, 646), 10, (229, 222, 200), (170, 161, 138), 1)
+    body_y = 592 if unit else 600
+    body_box = (55, body_y, CARD_W - 55, 664)
+    _rounded(draw, (40, body_y - 8, CARD_W - 40, 664), 7, (229, 222, 201), None, 1)
     segments = parse_markup(spec.text)
     lines = wrap_segments(draw, segments, body_regular, body_bold, body_box[2] - body_box[0])
-    max_lines = 4
-    lines = lines[:max_lines]
+    lines = lines[:3]
     draw_segments(
         draw,
         lines,
@@ -349,23 +354,20 @@ def render_card(spec: CardSpec) -> Image.Image:
         center_width=body_box[2] - body_box[0],
     )
 
-    # 底部单位数值
-    if spec.type not in ("order", "countermeasure"):
-        _rounded(draw, (26, 654, 116, 692), 10, (74, 68, 54), (38, 37, 30), 2)
-        draw.text((40, 674), "AT", font=small, fill=LIGHT, anchor="lm")
-        draw.text((100, 674), str(max(0, spec.at)), font=stat_font, fill=LIGHT, anchor="rm")
-        _rounded(draw, (CARD_W - 116, 654, CARD_W - 26, 692), 10, (88, 49, 42), (42, 27, 24), 2)
-        draw.text((CARD_W - 100, 674), "DF", font=small, fill=LIGHT, anchor="lm")
-        draw.text((CARD_W - 40, 674), str(max(0, spec.df)), font=stat_font, fill=LIGHT, anchor="rm")
-        draw.text((CARD_W // 2, 674), f"OC {max(0, spec.operation_cost)}", font=small, fill=MUTED, anchor="mm")
+    # 单位数值
+    if unit:
+        _rounded(draw, (88, 468, 170, 550), 8, (73, 68, 52), (35, 35, 28), 2)
+        draw.text((104, 484), "AT", font=small, fill=LIGHT, anchor="lm")
+        draw.text((154, 516), str(max(0, spec.at)), font=stat_font, fill=LIGHT, anchor="mm")
+        _rounded(draw, (330, 473, 412, 555), 8, (88, 49, 42), (38, 25, 22), 2)
+        draw.text((346, 489), "DF", font=small, fill=LIGHT, anchor="lm")
+        draw.text((396, 521), str(max(0, spec.df)), font=stat_font, fill=LIGHT, anchor="mm")
+        draw.text((250, 674), f"OC {max(0, spec.operation_cost)}", font=small, fill=MUTED, anchor="mm")
 
-    draw.text(
-        (CARD_W // 2, 690),
-        f"{spec.set_name}  ·  KARDS DIY",
-        font=_font(DEFAULT_FONT, 12),
-        fill=(145, 137, 116),
-        anchor="mm",
-    )
+    # 稀有度与扩展包
+    draw.rounded_rectangle((222, 681, 278, 697), radius=6, fill=(218, 211, 190), outline=(145, 137, 116), width=1)
+    draw.text((250, 689), spec.rarity[:8], font=_font(DEFAULT_FONT, 10), fill=INK, anchor="mm")
+    draw.text((488, 692), spec.set_name, font=_font(DEFAULT_FONT, 10), fill=MUTED, anchor="rm")
     return image.convert("RGB")
 
 
