@@ -16,16 +16,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import sys
 import tkinter as tk
 from dataclasses import dataclass, field
 from pathlib import Path
-from tkinter import colorchooser, filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Iterable
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
+# cSpell:ignore msyh msyhbd textbbox textlength LANCZOS vdraw pady textvariable columnspan initialfile
 CARD_W = 500
 CARD_H = 702
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,11 +82,14 @@ class Segment:
 class Line:
     """排版后的一行。"""
 
-    segments: list[Segment] = field(default_factory=list)
+    segments: list[Segment] = field(default_factory=lambda: list[Segment]())
     width: int = 0
 
 
-def _font(path: Path, size: int) -> ImageFont.FreeTypeFont:
+FontType = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+def _font(path: Path, size: int) -> FontType:
     """加载字体，找不到时回退到系统黑体。"""
     for item in (path, DEFAULT_FONT, FALLBACK_FONT):
         if item.is_file():
@@ -135,17 +137,17 @@ def parse_markup(text: str) -> list[Segment]:
     return [item for item in segments if item.text]
 
 
-def _text_width(draw: ImageDraw.ImageDraw, segment: Segment, font: ImageFont.FreeTypeFont) -> int:
+def _text_width(draw: ImageDraw.ImageDraw, segment: Segment, font: FontType) -> int:
     """测量一段文字宽度。"""
     box = draw.textbbox((0, 0), segment.text, font=font)
-    return box[2] - box[0]
+    return int(box[2] - box[0])
 
 
 def wrap_segments(
     draw: ImageDraw.ImageDraw,
     segments: Iterable[Segment],
-    font_regular: ImageFont.FreeTypeFont,
-    font_bold: ImageFont.FreeTypeFont,
+    font_regular: FontType,
+    font_bold: FontType,
     max_width: int,
 ) -> list[Line]:
     """按像素宽度换行，同时保留加粗片段。"""
@@ -199,8 +201,8 @@ def draw_segments(
     x: int,
     y: int,
     line_height: int,
-    font_regular: ImageFont.FreeTypeFont,
-    font_bold: ImageFont.FreeTypeFont,
+    font_regular: FontType,
+    font_bold: FontType,
     fill: tuple[int, int, int] = INK,
     center_width: int | None = None,
 ) -> int:
@@ -217,7 +219,14 @@ def draw_segments(
     return y
 
 
-def _rounded(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], radius: int, fill, outline=None, width=1) -> None:
+def _rounded(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    radius: int,
+    fill: tuple[int, int, int] | None,
+    outline: tuple[int, int, int] | None = None,
+    width: int = 1,
+) -> None:
     """绘制圆角矩形。"""
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
@@ -254,9 +263,9 @@ def _fit_cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
 def _paper_texture() -> Image.Image:
     """生成轻微纸张纹理。"""
     image = Image.new("RGB", (CARD_W, CARD_H), PAPER)
-    noise = Image.effect_noise((CARD_W, CARD_H), 12).convert("L").filter(ImageFilter.GaussianBlur(1))
+    noise = Image.effect_noise((CARD_W, CARD_H), 12).convert("L")
     overlay = Image.new("RGB", (CARD_W, CARD_H), (196, 190, 171))
-    return Image.composite(overlay, image, noise.point(lambda value: int(value * 0.28)))
+    return Image.composite(overlay, image, noise)
 
 
 def render_card(spec: CardSpec) -> Image.Image:
