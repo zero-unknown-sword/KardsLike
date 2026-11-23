@@ -5279,7 +5279,7 @@ class BattleUI:
     MAX_SLOTS: int = 5
 
     SLAM_SETTINGS: dict[str, tuple[int, float]] = {
-        "small": (240, 0.018),
+        "small": (360, 0.035),
         "medium": (480, 0.070),
         "large": (1200, 0.260),
     }
