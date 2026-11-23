@@ -1930,6 +1930,23 @@ class BattleConfig:
 
 
 @dataclass
+class ChooseOption:
+    """抉择选项。"""
+
+    card: Card
+    action: Callable[[], None]
+
+
+@dataclass
+class ChooseRequest:
+    """等待玩家二选一的抉择请求。"""
+
+    player: Player
+    source: Card
+    options: list[ChooseOption]
+
+
+@dataclass
 class SelectionRequest:
     """
     等待玩家选取手牌的请求
@@ -2123,6 +2140,8 @@ class BattleGround:
         """等待玩家确认的手牌选取"""
         self.pending_choice: CardChoice | None = None
         """等待玩家确认的三选一"""
+        self.pending_choose: ChooseRequest | None = None
+        """等待玩家确认的抉择"""
         self.last_choice_result: tuple[Card, list[Card]] | None = None
         """最近一次三选一结果"""
         self.act_rule: Callable[[Card, str], bool | None] | None = None
@@ -2910,6 +2929,8 @@ class BattleGround:
             return False
         if self.pending_choice is not None:
             return False
+        if self.pending_choose is not None:
+            return False
         if card not in self.hands[player].cards:
             return False
         if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
@@ -2991,6 +3012,8 @@ class BattleGround:
             if card in self.hands[player].cards:
                 self.hands[player].remove(card)
             self.emit(use_event, extra_cards=[card])
+            if self.pending_choose is not None:
+                return True
             if self.pending_target is not None:
                 self.pending_target.cancel = lambda: self.cancel_order(player, card, effective_cost)
                 self.pending_target.finish = lambda: self.finish_order(player, card)
@@ -3175,6 +3198,84 @@ class BattleGround:
         if self.kind_of(player) is PlayerKind.AI or player is Player.B:
             self.resolve_random_choice()
         return True
+
+    def start_choose(
+        self,
+        player: Player,
+        source: Card,
+        options: list[ChooseOption],
+    ) -> bool:
+        """
+        开始一次抉择。
+
+        Args:
+            player: 抉择方
+            source: 来源卡牌
+            options: 两个选项
+
+        Returns:
+            是否成功开始
+        """
+        if self.pending_choose is not None or self.pending_choice is not None:
+            return False
+        if len(options) != 2:
+            return False
+        self.pending_choose = ChooseRequest(player, source, options)
+        if self.kind_of(player) is PlayerKind.AI or player is Player.B:
+            self.resolve_choose(random.choice(options))
+        return True
+
+    def resolve_choose(self, option: ChooseOption) -> bool:
+        """
+        结算抉择选项。
+
+        Args:
+            option: 选中的选项
+
+        Returns:
+            是否结算成功
+        """
+        request = self.pending_choose
+        if request is None or option not in request.options:
+            return False
+        self.pending_choose = None
+        source = request.source
+        if source in self.hands[request.player].cards:
+            self.hands[request.player].remove(source)
+        if source not in self.discards[request.player]:
+            self.discards[request.player].append(source)
+        source.zone = Zone.DISCARD
+        option.action()
+        return True
+
+    def cancel_choose(self) -> bool:
+        """
+        取消抉择，把来源卡牌放回手中。
+
+        Returns:
+            是否取消成功
+        """
+        request = self.pending_choose
+        if request is None:
+            return False
+        self.pending_choose = None
+        self.move_to_hand(request.source, request.player)
+        return True
+
+    def unit_combat(self, attacker: Card, defender: Card) -> None:
+        """
+        两个单位互相造成等同于自身攻击力的战斗伤害。
+
+        Args:
+            attacker: 单位 A
+            defender: 单位 B
+        """
+        if not attacker.is_unit or not defender.is_unit:
+            return
+        attacker_at = attacker.at
+        defender_at = defender.at
+        self.damage(attacker, defender_at, defender, DamageType.BATTLE)
+        self.damage(defender, attacker_at, attacker, DamageType.BATTLE)
 
     def shadow_hq(self, player: Player) -> Card:
         """
@@ -4533,6 +4634,7 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_the_holy_boys",
     "kards:card_hampshire_regiment",
     "kards:card_su100",
+    "kards:card_expanded_soviet_research",
 ]
 
 
@@ -5250,6 +5352,9 @@ class BattleUI:
         self.choice_rects: list[tuple[pygame.Rect, Card]] = []
         self.choice_start: int = 0
         self.choice_token: int = 0
+        self.choose_rects: list[tuple[pygame.Rect, ChooseOption]] = []
+        self.choose_start: int = 0
+        self.choose_token: int = 0
         self.message: str = ""
         self.order_anims: list[tuple[Surface, pygame.Rect, int]] = []
         self.ai_timer: int = 0
@@ -5339,6 +5444,9 @@ class BattleUI:
         self.choice_rects.clear()
         self.choice_start = 0
         self.choice_token = 0
+        self.choose_rects.clear()
+        self.choose_start = 0
+        self.choose_token = 0
         self.showcase.clear()
         self.order_anims.clear()
         self.message = ""
@@ -5822,6 +5930,8 @@ class BattleUI:
         if ground.pending_selection is not None:
             return
         if ground.pending_choice is not None:
+            return
+        if ground.pending_choose is not None:
             return
         if ground.turn_owner is Player.B and ground.kind_of(Player.B) is PlayerKind.AI:
             self.ai_timer += dt
@@ -6462,6 +6572,7 @@ class BattleUI:
         self._draw_showcase(screen, ground)
         self._draw_status(screen, ground)
         self._draw_selection(screen, ground)
+        self._draw_choose(screen, ground)
         self._draw_choice(screen, ground)
         if ground.winner is not None:
             self._draw_winner(screen, ground)
@@ -6617,6 +6728,61 @@ class BattleUI:
             self._draw_stats_overlay(screen, card, rect)
             pygame.draw.rect(screen, (235, 235, 235), rect, 2, border_radius=4)
             x += width + gap
+
+    def _draw_choose(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制抉择: 来源卡牌飞到屏幕中间并分成左右两个选项
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        request = ground.pending_choose
+        if request is None:
+            self.choose_rects.clear()
+            return
+        now = pygame.time.get_ticks()
+        if self.choose_token != id(request):
+            self.choose_token = id(request)
+            self.choose_start = now
+        progress = max(0.0, min(1.0, (now - self.choose_start) / 360))
+        ease = 1 - (1 - progress) ** 3
+        width = int(self.card_w * 1.12)
+        height = int(self.card_h * 1.12)
+        gap = max(16, width // 8)
+        center_y = screen.get_height() // 2
+        origin = self.last_hand_rects.get(id(request.source))
+        if origin is None:
+            origin = pygame.Rect(0, 0, self.card_w, self.card_h)
+            origin.center = (screen.get_width() // 2, center_y)
+        start_center = origin.center
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((8, 8, 6, 80))
+        screen.blit(overlay, (0, 0))
+        self._text(
+            screen,
+            "抉择",
+            (screen.get_width() // 2, center_y - height // 2 - 44),
+            (235, 220, 175),
+            center=True,
+            font=self.big_font,
+        )
+        self.choose_rects = []
+        for index, option in enumerate(request.options[:2]):
+            target_x = screen.get_width() // 2 + (index * 2 - 1) * (width + gap) // 2
+            target_center = (target_x, center_y)
+            current_center = (
+                int(start_center[0] + (target_center[0] - start_center[0]) * ease),
+                int(start_center[1] + (target_center[1] - start_center[1]) * ease),
+            )
+            current_w = int(origin.width + (width - origin.width) * ease)
+            current_h = int(origin.height + (height - origin.height) * ease)
+            rect = pygame.Rect(0, 0, max(1, current_w), max(1, current_h))
+            rect.center = current_center
+            self._blit_card(screen, option.card, rect)
+            pygame.draw.rect(screen, (235, 220, 175), rect, 2, border_radius=4)
+            if progress >= 1:
+                self.choose_rects.append((rect.copy(), option))
 
     def _draw_choice(self, screen: Surface, ground: BattleGround) -> None:
         """
@@ -7726,6 +7892,13 @@ class BattleUI:
         if ground.winner is not None:
             if self.continue_button.rect.collidepoint(pos):
                 self._continue_after_match()
+            return
+        if ground.pending_choose is not None:
+            for rect, option in self.choose_rects:
+                if rect.collidepoint(pos):
+                    ground.resolve_choose(option)
+                    return
+            ground.cancel_choose()
             return
         if ground.pending_choice is not None:
             if self.end_button.rect.collidepoint(pos):
