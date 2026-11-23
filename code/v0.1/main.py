@@ -5561,10 +5561,24 @@ class BattleUI:
             event: LEAVE 事件
             ground: 战斗全局参数
         """
-        if event.dict.get("way") is not LeaveMethod.REMOVED:
-            return
+        way = event.dict.get("way")
         card = event.dict.get("card")
         if not isinstance(card, Card):
+            return
+        if way is LeaveMethod.DESTROYED and card.damage_amount <= 0:
+            # 非伤害消灭播放与伤害相同的射击动画
+            source = event.dict.get("source")
+            if isinstance(source, Card) and source is not card:
+                self._on_damaged_event(
+                    Event(
+                        EventType.DAMAGED,
+                        target=card,
+                        source=source,
+                    ),
+                    ground,
+                )
+            return
+        if way is not LeaveMethod.REMOVED:
             return
         record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
         rect = record[1].copy() if record is not None else pygame.Rect(0, 0, self.card_w, self.card_h)
@@ -6808,10 +6822,8 @@ class BattleUI:
                 continue
             if target.zone is not Zone.DISCARD:
                 continue
-            if target.is_unit:
-                self.death_marks.append(
-                    (str(target.damage_amount) if target.damage_amount > 0 else "消灭", rect.copy(), now)
-                )
+            if target.damage_amount > 0:
+                self.death_marks.append((str(target.damage_amount), rect.copy(), now))
         self.last_rects = dict(self.frame_rects)
 
     def _draw_death_marks(self, screen: Surface) -> None:
