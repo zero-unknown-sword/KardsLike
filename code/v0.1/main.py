@@ -4694,9 +4694,9 @@ def create_battle() -> BattleGround:
     deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
     ground = BattleGround(config, deck_a, deck_b)
     for player in (Player.A, Player.B):
-        ground.hqs[player].df = 99
-        ground.hqs[player].max_df = 99
-        ground.hqs[player].initial_df = 99
+        ground.hqs[player].df = 20
+        ground.hqs[player].max_df = 20
+        ground.hqs[player].initial_df = 20
     return ground
 
 # ==================== 全局状态 ====================
@@ -6822,8 +6822,10 @@ class BattleUI:
                 continue
             if target.zone is not Zone.DISCARD:
                 continue
-            if target.damage_amount > 0:
-                self.death_marks.append((str(target.damage_amount), rect.copy(), now))
+            if target.is_unit:
+                self.death_marks.append(
+                    (str(target.damage_amount) if target.damage_amount > 0 else "消灭", rect.copy(), now)
+                )
         self.last_rects = dict(self.frame_rects)
 
     def _draw_death_marks(self, screen: Surface) -> None:
