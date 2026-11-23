@@ -42,6 +42,8 @@ logger = cast(BetterLogger, logging.getLogger("kardslike"))
 
 MAX_STAT: Final[int] = 99
 MAX_HQ_DF: Final[int] = 99
+BATTLE_EN: Final[str] = "Battle (TBD)"
+"""战斗的英文名暂定"""
 """攻击力/防御力数值上限"""
 
 
@@ -228,7 +230,7 @@ class DamageType(StrEnum):
     Attributes:
         COUNTER: 反击伤害, 属于对战伤害
         ATTACK: 单位攻击伤害, 属于对战伤害
-        BATTLE: 战斗伤害, 由特殊的战斗触发
+        BATTLE: 战斗伤害, 由特殊的战斗触发(英文暂定 Battle (TBD))
         HQ_ATTACK: 对总部的攻击伤害, 属于对抗伤害但不属于对战伤害
         OTHER: 其他伤害, 不属于对抗伤害
         NONE: 无类型伤害, 由卡牌效果直接造成
