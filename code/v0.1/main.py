@@ -5337,6 +5337,7 @@ class BattleUI:
         self.next_unit_anim: int = 0
         self.shuffle_anims: dict[Player, int] = {}
         self.move_anims: dict[int, tuple[Card, pygame.Rect, int]] = {}
+        self.return_anims: list[tuple[Card, pygame.Rect, int]] = []
         self.deck_add_anims: list[tuple[Card, pygame.Rect, int]] = []
         self.damage_bullets: list[
             tuple[tuple[int, int], tuple[int, int], int]
@@ -5434,6 +5435,7 @@ class BattleUI:
         self.spawn_anims.clear()
         self.shuffle_anims.clear()
         self.move_anims.clear()
+        self.return_anims.clear()
         self.deck_add_anims.clear()
         self.damage_bullets.clear()
         self.choice_move_anims.clear()
@@ -5621,7 +5623,7 @@ class BattleUI:
             return
         record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
         if record is not None:
-            self.move_anims[id(card)] = (card, record[1].copy(), pygame.time.get_ticks())
+            self.move_anims[id(card)] = (card, record[1].copy(), pygame.time.get_ticks() + 100)
 
     def _on_shuffle_event(self, event: Event, ground: BattleGround) -> None:
         """
@@ -5674,6 +5676,11 @@ class BattleUI:
         way = event.dict.get("way")
         card = event.dict.get("card")
         if not isinstance(card, Card):
+            return
+        if way is LeaveMethod.RETURN_HAND:
+            record = self.frame_rects.get(id(card)) or self.last_rects.get(id(card))
+            rect = record[1].copy() if record is not None else pygame.Rect(0, 0, self.card_w, self.card_h)
+            self.return_anims.append((card, rect, pygame.time.get_ticks() + 160))
             return
         if way is LeaveMethod.DESTROYED and card.damage_amount <= 0:
             # 非伤害消灭播放与伤害相同的射击动画
@@ -6279,7 +6286,19 @@ class BattleUI:
             max(1, int(fw * rect.width)),
             max(1, int(fh * rect.height)),
         )
-        pygame.draw.rect(screen, (0, 0, 0), area)
+        pygame.draw.rect(
+            screen,
+            (48, 49, 41),
+            area,
+            border_radius=max(2, area.width // 10),
+        )
+        pygame.draw.rect(
+            screen,
+            (119, 108, 82),
+            area,
+            1,
+            border_radius=max(2, area.width // 10),
+        )
 
     def _draw_value(
         self,
@@ -6309,7 +6328,12 @@ class BattleUI:
             font = load_font(size)
             self.font_cache[size] = font
         surface = font.render(value, True, color)
+        shadow = font.render(value, True, (18, 18, 14))
         center = (rect.x + int(fx * rect.width), rect.y + int(fy * rect.height))
+        screen.blit(
+            shadow,
+            shadow.get_rect(center=(center[0] + 2, center[1] + 2)),
+        )
         screen.blit(surface, surface.get_rect(center=center))
 
     def _draw_stats_overlay(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:
@@ -6569,6 +6593,7 @@ class BattleUI:
         self._draw_bullets(screen)
         self._draw_decks(screen, ground)
         self._draw_draw_anims(screen, ground)
+        self._draw_return_anims(screen, ground)
         self._draw_discard_anims(screen)
         self._draw_remove_anims(screen)
         self._draw_showcase(screen, ground)
@@ -7538,6 +7563,41 @@ class BattleUI:
             image.set_alpha(int(255 * fade))
             screen.blit(image, (x + offset_x, y + offset_y))
 
+    def _draw_return_anims(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制单位回手动画: 先在原位置短暂停留, 再飞向手牌
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if not self.return_anims:
+            return
+        now = pygame.time.get_ticks()
+        duration = 520
+        alive: list[tuple[Card, pygame.Rect, int]] = []
+        hand_a = self.hand_rects(screen, len(ground.hands[Player.A].cards))
+        target_a = hand_a[-1].center if hand_a else (screen.get_width() // 2, self.own_hand_y + self.card_h // 2)
+        target_b = (screen.get_width() // 2, self.opp_hand_y + self.opp_hand_h // 2)
+        for card, old_rect, start in self.return_anims:
+            if now < start:
+                alive.append((card, old_rect, start))
+                continue
+            progress = (now - start) / duration
+            if progress >= 1:
+                continue
+            alive.append((card, old_rect, start))
+            ease = 1 - (1 - progress) ** 3
+            target = target_a if card.controller is Player.A else target_b
+            x = int(old_rect.centerx + (target[0] - old_rect.centerx) * ease)
+            y = int(old_rect.centery + (target[1] - old_rect.centery) * ease)
+            y -= int(22 * math.sin(math.pi * progress))
+            art = self._card_art(card)
+            image = (art if art is not None else self.face).copy()
+            image.set_alpha(int(255 * (1 - progress * 0.35)))
+            screen.blit(image, image.get_rect(center=(x, y)))
+        self.return_anims = alive
+
     def _draw_draw_anims(self, screen: Surface, ground: BattleGround) -> None:
         """
         绘制抽牌时从牌堆飞向手牌的卡背
@@ -7608,11 +7668,14 @@ class BattleUI:
         if not self.move_anims:
             return
         now = pygame.time.get_ticks()
-        duration = 320
+        duration = 420
         alive: dict[int, tuple[Card, pygame.Rect, int]] = {}
         for key, (card, old_rect, start) in self.move_anims.items():
             record = self.frame_rects.get(key)
             if record is None or card.line is None:
+                continue
+            if now < start:
+                alive[key] = (card, old_rect, start)
                 continue
             elapsed = now - start
             if elapsed >= duration:
@@ -8240,6 +8303,7 @@ class BattleUI:
         ghost.set_alpha(120)
         rect = ghost.get_rect(center=self.drag_pos)
         screen.blit(ghost, rect)
+        self._draw_stats_overlay(screen, self.drag_card, rect)
         pygame.draw.rect(screen, (255, 210, 80), rect, 2, border_radius=4)
 
     def _draw_preview_target(self, screen: Surface, ground: BattleGround) -> None:
