@@ -19,26 +19,30 @@ from main import (
     Rarity,
     Zone,
 )
+from mods.kards.code.keywords.countdown import KEYWORD as COUNTDOWN
 from mods.kards.code.veteran import VeteranProfile, promote, register_veteran
 
 
-def friendly_turn_start(card: Card, event: Event, ground: BattleGround) -> bool:
-    """友方回合开始时"""
-    return (
-        card.zone is Zone.BOARD
-        and event.player is card.controller
-        and not card.has_keyword("veteran")
-    )
+def countdown_decreased(card: Card, event: Event, ground: BattleGround) -> bool:
+    """本单位的倒计时降低"""
+    return card.zone is Zone.BOARD and event.card is card
 
 
-def turn_start_action(card: Card, event: Event, ground: BattleGround) -> None:
-    """付出 2 点总部伤害, 抽一张牌; 第二次后升为老兵"""
+def countdown_payoff(card: Card, event: Event, ground: BattleGround) -> None:
+    """倒计时降低: 抽 1 张牌, 对友方总部造成 2 点伤害"""
     player = card.controller
-    ground.damage(ground.hqs[player], 2, card, DamageType.NONE)
     ground.draw(player, card)
-    card.veteran_counter = getattr(card, "veteran_counter", 0) + 1
-    if card.veteran_counter >= 2:
-        promote(card, ground)
+    ground.damage(ground.hqs[player], 2, card, DamageType.NONE)
+
+
+def countdown_finished(card: Card, event: Event, ground: BattleGround) -> bool:
+    """倒计时剩余值为 0"""
+    return card.zone is Zone.BOARD and event.card is card and event.dict.get("remaining") == 0
+
+
+def become_veteran(card: Card, event: Event, ground: BattleGround) -> None:
+    """倒计时归零后升为老兵"""
+    promote(card, ground)
 
 
 def veteran_enter_action(card: Card, ground: BattleGround) -> None:
@@ -50,7 +54,10 @@ def veteran_enter_action(card: Card, ground: BattleGround) -> None:
     ground.buff(ground.hqs[player], df=3)
 
 
-BASE_PROC = Procedure(EventType.TURN_START, friendly_turn_start, turn_start_action)
+BASE_PROCEDURES = [
+    Procedure(EventType.COUNTDOWN, countdown_decreased, countdown_payoff),
+    Procedure(EventType.COUNTDOWN, countdown_finished, become_veteran),
+]
 
 VETERAN = VeteranProfile(
     at=3,
@@ -59,7 +66,7 @@ VETERAN = VeteranProfile(
     art="216th_guards_vet.png",
     text="升为老兵时，使其他友方单位和友方总部获得 +3 防御力。",
     keywords=["guard"],
-    base_procedures=[BASE_PROC],
+    base_procedures=BASE_PROCEDURES,
     on_promote=veteran_enter_action,
 )
 
@@ -68,13 +75,14 @@ CARD_DATA = CardData(
     country=Country.SOVIET,
     cost=3,
     display_name="近卫步兵第 216 团",
-    text="友方回合开始时，对友方总部造成 2 点伤害，抽 1 张牌。第二次后，升为老兵。",
+    text="倒计时 2。倒计时降低时，抽 1 张牌并对友方总部造成 2 点伤害；倒计时为 0 时升为老兵。",
     art="216th_guards.png",
     rare=Rarity.STANDARD,
     at=3,
     df=5,
     operation_cost=1,
-    procedures=[BASE_PROC],
+    keywords=[COUNTDOWN.with_val(2)],
+    procedures=BASE_PROCEDURES,
 )
 
 register_veteran("kards:card_216th_guards", VETERAN)

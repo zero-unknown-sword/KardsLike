@@ -604,6 +604,15 @@ class EventType(IntEnum):
     数据:
         player: 刚结束回合的玩家
     """
+    COUNTDOWN = pygame.event.custom_type()
+    """
+    倒计时降低
+
+    数据:
+        card: 倒计时所在的卡牌
+        player: 控制者
+        remaining: 降低后的剩余值
+    """
     DISCARD = pygame.event.custom_type()
     """
     卡牌被弃掉
@@ -6262,7 +6271,10 @@ class BattleUI:
         for keyword_id in dict.fromkeys([*card.keywords, *card.aura_keywords]):
             if keyword_id == "armor":
                 continue
-            if self._keyword_icon(keyword_id) is not None:
+            if keyword_id == "countdown":
+                value = card.keyword_values.get("countdown", 0)
+                items.append(("countdown", value if isinstance(value, int) else 0))
+            elif self._keyword_icon(keyword_id) is not None:
                 items.append(("keyword", keyword_id))
         armor = min(max(card.armor, 0), 3)
         if armor > 0:
@@ -6334,6 +6346,8 @@ class BattleUI:
             icon_id = str(value) if kind == "keyword" else kind
             if kind == "armor":
                 icon = self._keyword_icon("guard")
+            elif kind == "countdown":
+                icon = self._keyword_icon("countdown")
             else:
                 icon = self._keyword_icon(icon_id)
             if icon is None:
@@ -6341,7 +6355,7 @@ class BattleUI:
             image = pygame.transform.smoothscale(icon, (size, size))
             screen.blit(image, (x, y))
             pygame.draw.rect(screen, (25, 25, 25), (x, y, size, size), 1)
-            if kind == "armor":
+            if kind in ("armor", "countdown"):
                 font_size = max(10, int(size * 0.62))
                 font = self.font_cache.get(font_size)
                 if font is None:
