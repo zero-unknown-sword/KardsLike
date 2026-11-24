@@ -7465,7 +7465,13 @@ class BattleUI:
         count = len(own_hand)
         max_angle = 0.0 if count <= 1 else min(3.2, 22.0 / (count - 1))
         mid = (count - 1) / 2
-        for index, (rect, card) in enumerate(zip(base_rects, own_hand)):
+        draw_order = list(range(count))
+        if hovered_index >= 0:
+            draw_order.remove(hovered_index)
+            draw_order.append(hovered_index)
+        for index in draw_order:
+            rect = base_rects[index]
+            card = own_hand[index]
             if any(anim_card is card for anim_card, _, _ in self.choice_move_anims):
                 continue
             reveal = self.hand_reveal.get(id(card))
