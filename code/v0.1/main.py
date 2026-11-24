@@ -1050,6 +1050,9 @@ class Card:
 
     @df.setter
     def df(self, value: int) -> None:
+        # 防御力修改钩子: 511 团等卡牌的防御力不能降到 1 以下
+        if self.has_tag(CardTag.DEFENSE_FLOOR_ONE):
+            value = max(1, value)
         self._df.set(value)
 
     @property
@@ -1331,8 +1334,7 @@ class Card:
         Returns:
             是否被消灭
         """
-        floor = 1 if self.has_tag(CardTag.DEFENSE_FLOOR_ONE) else 0
-        self.df = max(floor, self.df - amount) if floor else self.df - amount
+        self.df -= amount
         self.damage_amount = amount
         self.damage_time = pygame.time.get_ticks()
         if self.df <= 0:
