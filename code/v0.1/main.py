@@ -3267,6 +3267,20 @@ class BattleGround:
         if until_turn_end:
             card.suppressed_until_turn = self.turn_count
 
+    def extend_suppression(self, card: Card, turns: int = 1) -> None:
+        """延长单位的压制时间。
+
+        Args:
+            card: 被压制的单位
+            turns: 额外压制的回合数
+        """
+        if not card.suppressed:
+            return
+        if card.suppressed_until_turn >= 0:
+            card.suppressed_until_turn += turns
+        else:
+            card.suppressed_turn += turns
+
     def start_card_choice(
         self,
         player: Player,
