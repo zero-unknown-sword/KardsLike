@@ -2968,7 +2968,7 @@ class BattleGround:
         if player is not self.turn_owner:
             return "现在不是你的回合"
         if self.pending_selection is not None or self.pending_choice is not None or self.pending_choose is not None:
-            return "请先完成当前选择"
+            return "请先完成当前操作"
         if card not in self.hands[player].cards:
             return "该卡不在你的手中"
         if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
@@ -3244,7 +3244,7 @@ class BattleGround:
         origin_deck: bool = False,
         unselected_bottom: bool = False,
         loot_event: bool = False,
-        title: str = "选择一张牌",
+        title: str = "发现一张牌",
         callback: Callable[[Card, list[Card]], None] | None = None,
         next_turn: bool = False,
     ) -> bool:
@@ -3748,7 +3748,7 @@ class BattleGround:
         max_count: int,
         callback: Callable[[list[Card]], None],
         filter: Callable[[Card], bool] | None = None,
-        title: str = "",
+        title: str = "选取手牌",
     ) -> bool:
         """
         开始一次手牌选取
@@ -3832,7 +3832,7 @@ class BattleGround:
             0,
             max_count,
             lambda cards: self._apply_mulligan(player, cards),
-            title="重新调度",
+            title="重新调度：选取要替换的手牌",
         )
 
     def _apply_mulligan(self, player: Player, cards: list[Card]) -> None:
@@ -6512,15 +6512,20 @@ class BattleUI:
         if start + total > right:
             start = right - total
         start = max(left, start)
+        if count >= 4:
+            # 扇形手牌允许轻微遮挡, 让整组更紧凑
+            gap = min(gap, -int(self.card_w * 0.14))
         mid = max(1.0, (count - 1) / 2)
+        drop = int(self.card_h * 0.025)
         result: list[pygame.Rect] = []
         for i in range(count):
             distance = abs(i - (count - 1) / 2) / mid
-            lift = int((1.0 - distance) * self.card_h * 0.028)
+            # 中心低、两侧高: 扇形圆心在画面下方
+            center_drop = int((1.0 - distance) * drop)
             result.append(
                 pygame.Rect(
                     start + i * (self.card_w + gap),
-                    self.own_hand_y - lift,
+                    self.own_hand_y - drop + center_drop,
                     self.card_w,
                     self.card_h,
                 )
@@ -6792,7 +6797,7 @@ class BattleUI:
         if font is None:
             font = load_font(size // 2)
             self.font_cache[size // 2] = font
-        text = font.render("选", True, (235, 60, 60))
+        text = font.render("取", True, (235, 60, 60))
         stamp.blit(text, text.get_rect(center=(size // 2, size // 2)))
         screen.blit(stamp, stamp.get_rect(center=rect.center))
 
@@ -6821,7 +6826,9 @@ class BattleUI:
         color = (225, 140, 40) if enabled else (110, 80, 50)
         pygame.draw.rect(screen, color, rect, border_radius=8)
         pygame.draw.rect(screen, (255, 200, 120), rect, 2, border_radius=8)
-        self._text(screen, "确定", rect.center, (255, 245, 225), center=True)
+        title = request.title or "选取手牌"
+        self._text(screen, title, (width // 2, rect.y - 24), (245, 235, 200), center=True)
+        self._text(screen, "确定选取", rect.center, (255, 245, 225), center=True)
         self.confirm_rect = rect
 
     def _draw_revealed_hover(self, screen: Surface, ground: BattleGround) -> None:
@@ -7458,12 +7465,12 @@ class BattleUI:
         base_rects = self.hand_rects(screen, len(own_hand))
         mouse = pygame.mouse.get_pos()
         hovered_index = -1
-        if self.drag_card is None:
+        if self.drag_card is None and request is None and ground.pending_choice is None:
             for index, rect in enumerate(base_rects):
                 if rect.inflate(8, 8).collidepoint(mouse):
                     hovered_index = index
         count = len(own_hand)
-        max_angle = 0.0 if count <= 1 else min(3.2, 22.0 / (count - 1))
+        max_angle = 0.0 if count <= 1 else min(2.2, 16.0 / (count - 1))
         mid = (count - 1) / 2
         draw_order = list(range(count))
         if hovered_index >= 0:

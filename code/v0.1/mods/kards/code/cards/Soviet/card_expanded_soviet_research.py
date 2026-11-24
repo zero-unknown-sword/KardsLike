@@ -69,6 +69,7 @@ CARD_DATA = CardData(
     text="抉择：获取 1 张标准弹药，或获取 1 张高级苏联研发。",
     art="expanded_soviet_research.png",
     rare=Rarity.STANDARD,
+    tags=[CardTag.CHOOSE],
     procedures=[
         Procedure(
             EventType.USE,

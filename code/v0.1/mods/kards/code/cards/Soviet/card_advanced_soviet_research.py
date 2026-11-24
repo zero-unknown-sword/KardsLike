@@ -70,6 +70,7 @@ CARD_DATA = CardData(
     text="抉择：获取 1 张倾斜装甲，或获取 3 张斯大林管风琴。",
     art="advanced_soviet_research.png",
     rare=Rarity.STANDARD,
+    tags=[CardTag.CHOOSE],
     procedures=[
         Procedure(
             EventType.USE,
