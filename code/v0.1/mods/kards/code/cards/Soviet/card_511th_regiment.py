@@ -47,7 +47,6 @@ VETERAN = VeteranProfile(
     keywords=["ambush"],
     procedures=[Procedure(EventType.LOOP, lambda card, event, ground: True, veteran_aura)],
     base_procedures=[BASE_PROC],
-    base_tags=[CardTag.DEFENSE_FLOOR_ONE],
 )
 
 CARD_DATA = CardData(
