@@ -627,6 +627,15 @@ class EventType(IntEnum):
         player: 情报使用方
         amount: 溢出数量
     """
+    DEVELOP = pygame.event.custom_type()
+    """
+    开发选取完成
+
+    数据:
+        card: 选中的卡牌
+        player: 选取方
+        source: 开发来源
+    """
     LOOT = pygame.event.custom_type()
     """
     战利品选取完成
@@ -3611,6 +3620,15 @@ class BattleGround:
             self.shuffle_deck(choice.player)
         remaining = [other for other in choice.cards if other is not card]
         self.last_choice_result = (card, remaining)
+        if choice.develop:
+            self.emit(
+                Event(
+                    EventType.DEVELOP,
+                    card=card,
+                    player=choice.player,
+                    source=choice.source,
+                )
+            )
         if choice.loot_event:
             self.emit(
                 Event(
