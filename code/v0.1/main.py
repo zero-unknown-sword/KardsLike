@@ -6613,35 +6613,48 @@ class BattleUI:
 
     def _draw_stats_overlay(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:
         """
-        用黑色覆盖卡面自带的费用/行动花费/攻击/防御, 并写入当前实际数值
+        覆盖卡面自带的费用/行动花费/攻击/防御, 并写入当前实际数值
+
+        只有实际数值变化时才覆盖原数值, 普通卡不再出现黑色数值块。
 
         Args:
             screen: 屏幕 Surface
             card: 卡牌
             rect: 卡牌矩形
         """
-        # 数值位置按 DIY 的 500x702 CSS 坐标换算
-        # 费用: left 17, top 3, 45x95, 76px
-        self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115)
-        self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (191, 198, 179))
+        # 费用: DIY 500x702 坐标 left 17, top 3, 45x95, 76px
+        if card.cost != card.initial_cost:
+            self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115)
+            self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (191, 198, 179))
         if not card.is_unit:
             return
         # 行动花费: left 62, top 45, 20x40, 33px
-        self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065)
-        self._draw_value(screen, str(card.operation_cost), rect, 0.144, 0.093, 0.047, (230, 230, 230))
+        if card.operation_cost != card.initial_operation_cost:
+            self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065)
+            self._draw_value(
+                screen,
+                str(card.operation_cost),
+                rect,
+                0.144,
+                0.093,
+                0.047,
+                (191, 198, 179),
+            )
         # 攻击: left 101, top 477, 56x70, 56px
-        self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095)
-        at_color = (120, 255, 140) if card.at > card.initial_at else (191, 198, 179)
-        self._draw_value(screen, str(card.at), rect, 0.258, 0.729, 0.080, at_color)
+        if card.at != card.initial_at:
+            self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095)
+            at_color = (120, 255, 140) if card.at > card.initial_at else (191, 198, 179)
+            self._draw_value(screen, str(card.at), rect, 0.258, 0.729, 0.080, at_color)
         # 防御: left 343, top 477, 56x70, 56px
-        self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095)
-        if card.df < card.max_df:
-            df_color = (255, 90, 90)
-        elif card.max_df > card.initial_df:
-            df_color = (120, 255, 140)
-        else:
-            df_color = (191, 198, 179)
-        self._draw_value(screen, str(card.df), rect, 0.742, 0.729, 0.080, df_color)
+        if card.df != card.initial_df or card.max_df != card.initial_df:
+            self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095)
+            if card.df < card.max_df:
+                df_color = (255, 90, 90)
+            elif card.max_df > card.initial_df:
+                df_color = (120, 255, 140)
+            else:
+                df_color = (191, 198, 179)
+            self._draw_value(screen, str(card.df), rect, 0.742, 0.729, 0.080, df_color)
 
     def line_rects(self, screen: Surface, count: int, y: int) -> list[pygame.Rect]:
         """
