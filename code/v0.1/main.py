@@ -5398,6 +5398,30 @@ def load_font(size: int) -> Font:
         return pygame.font.Font(path, size)
     return pygame.font.Font(None, size)
 
+_STAT_FONT_PATH: Path = Path(__file__).resolve().parent / "mods" / "kards" / "assets" / "font" / "Roboto-Black.ttf"
+_STAT_FONT_CACHE: dict[int, Font] = {}
+
+
+def load_stat_font(size: int) -> Font:
+    """加载 DIY 数值字体 Roboto Black。
+
+    Args:
+        size: 字号
+
+    Returns:
+        字体对象, 字体缺失时退回普通字体
+    """
+    cached = _STAT_FONT_CACHE.get(size)
+    if cached is not None:
+        return cached
+    try:
+        font = pygame.font.Font(str(_STAT_FONT_PATH), size)
+    except (OSError, pygame.error):
+        font = load_font(size)
+    _STAT_FONT_CACHE[size] = font
+    return font
+
+
 # ==================== 战斗界面 ====================
 
 
@@ -6606,17 +6630,9 @@ class BattleUI:
             color: 文字颜色
         """
         size = max(8, int(rect.height * scale))
-        font = self.font_cache.get(size)
-        if font is None:
-            font = load_font(size)
-            self.font_cache[size] = font
+        font = load_stat_font(size)
         surface = font.render(value, True, color)
-        shadow = font.render(value, True, (18, 18, 14))
         center = (rect.x + int(fx * rect.width), rect.y + int(fy * rect.height))
-        screen.blit(
-            shadow,
-            shadow.get_rect(center=(center[0] + 2, center[1] + 2)),
-        )
         screen.blit(surface, surface.get_rect(center=center))
 
     def _draw_stats_overlay(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:
