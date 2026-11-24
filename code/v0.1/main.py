@@ -6445,19 +6445,20 @@ class BattleUI:
             card: 卡牌
             rect: 卡牌矩形
         """
-        # 费用
-        self._cover(screen, rect, 0.015, 0.015, 0.10, 0.115)
-        self._draw_value(screen, str(card.cost), rect, 0.065, 0.075, 0.105, (245, 245, 245))
+        # 数值位置按 DIY 的 500x702 CSS 坐标换算
+        # 费用: left 17, top 3, 45x95, 76px
+        self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115)
+        self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (245, 245, 245))
         if not card.is_unit:
             return
-        # 行动花费
-        self._cover(screen, rect, 0.112, 0.070, 0.076, 0.058)
-        self._draw_value(screen, str(card.operation_cost), rect, 0.150, 0.099, 0.055, (230, 230, 230))
-        # 攻击
+        # 行动花费: left 62, top 45, 20x40, 33px
+        self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065)
+        self._draw_value(screen, str(card.operation_cost), rect, 0.144, 0.093, 0.047, (230, 230, 230))
+        # 攻击: left 101, top 477, 56x70, 56px
         self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095)
         at_color = (120, 255, 140) if card.at > card.initial_at else (235, 245, 235)
-        self._draw_value(screen, str(card.at), rect, 0.267, 0.727, 0.105, at_color)
-        # 防御
+        self._draw_value(screen, str(card.at), rect, 0.258, 0.729, 0.080, at_color)
+        # 防御: left 343, top 477, 56x70, 56px
         self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095)
         if card.df < card.max_df:
             df_color = (255, 90, 90)
@@ -6465,7 +6466,7 @@ class BattleUI:
             df_color = (120, 255, 140)
         else:
             df_color = (250, 235, 235)
-        self._draw_value(screen, str(card.df), rect, 0.745, 0.727, 0.105, df_color)
+        self._draw_value(screen, str(card.df), rect, 0.742, 0.729, 0.080, df_color)
 
     def line_rects(self, screen: Surface, count: int, y: int) -> list[pygame.Rect]:
         """
@@ -7475,7 +7476,6 @@ class BattleUI:
         count = len(own_hand)
         pivot_x = screen.get_width() / 2
         pivot_y = screen.get_height() * 1.5
-        mid = (count - 1) / 2
         draw_order = list(range(count))
         if hovered_index >= 0:
             draw_order.remove(hovered_index)
