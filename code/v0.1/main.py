@@ -6507,25 +6507,26 @@ class BattleUI:
         if count > 1:
             max_gap = (available - count * self.card_w) // (count - 1)
             gap = min(gap, max_gap)
-        total = count * self.card_w + max(0, count - 1) * gap
-        start = (screen.get_width() - total) // 2
-        if start + total > right:
-            start = right - total
-        start = max(left, start)
         if count >= 4:
             # 扇形手牌允许轻微遮挡, 让整组更紧凑
             gap = min(gap, -int(self.card_w * 0.14))
-        mid = max(1.0, (count - 1) / 2)
-        drop = int(self.card_h * 0.025)
+        total = count * self.card_w + max(0, count - 1) * gap
+        start = (screen.get_width() - total) // 2
+        start = max(self.margin, min(start, screen.get_width() - self.margin - total))
+        # 扇形圆心在屏幕下方 (X/2, 3Y/2), 中心卡最高, 两侧沿圆弧向下
+        pivot_x = screen.get_width() / 2
+        pivot_y = screen.get_height() * 1.5
+        base_center_y = self.own_hand_y + self.card_h / 2
+        radius = max(1.0, pivot_y - base_center_y)
         result: list[pygame.Rect] = []
         for i in range(count):
-            distance = abs(i - (count - 1) / 2) / mid
-            # 中心低、两侧高: 扇形圆心在画面下方
-            center_drop = int((1.0 - distance) * drop)
+            center_x = start + i * (self.card_w + gap) + self.card_w / 2
+            dx = center_x - pivot_x
+            center_y = pivot_y - math.sqrt(max(0.0, radius * radius - dx * dx))
             result.append(
                 pygame.Rect(
-                    start + i * (self.card_w + gap),
-                    self.own_hand_y - drop + center_drop,
+                    int(center_x - self.card_w / 2),
+                    int(center_y - self.card_h / 2),
                     self.card_w,
                     self.card_h,
                 )
@@ -7470,7 +7471,8 @@ class BattleUI:
                 if rect.inflate(8, 8).collidepoint(mouse):
                     hovered_index = index
         count = len(own_hand)
-        max_angle = 0.0 if count <= 1 else min(2.2, 16.0 / (count - 1))
+        pivot_x = screen.get_width() / 2
+        pivot_y = screen.get_height() * 1.5
         mid = (count - 1) / 2
         draw_order = list(range(count))
         if hovered_index >= 0:
@@ -7489,7 +7491,9 @@ class BattleUI:
             dragging = card is self.drag_card and self.drag_from_hand
             selected = card is self.selected_hand
             hover_lift = int(self.card_h * 0.18) if index == hovered_index and not dragging else 0
-            angle = (index - mid) * max_angle
+            center_y = rect.y + self.card_h / 2
+            radial = max(1.0, pivot_y - center_y)
+            angle = -math.degrees(math.atan2(rect.centerx - pivot_x, radial))
             visual_rect = pygame.Rect(rect.x, rect.y - hover_lift, rect.width, rect.height)
             surface = pygame.Surface((self.card_w, self.card_h), pygame.SRCALPHA)
             art = self._card_art(card)
