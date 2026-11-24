@@ -24,15 +24,20 @@ from main import (
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """将 8 点伤害随机分配给所有敌方目标"""
     player = event.player
-    targets = [
-        item
-        for item in ground.all_targets()
-        if item.controller is not player
-    ]
-    for _ in range(8):
-        if not targets:
-            break
+
+    def hit(remaining: int) -> None:
+        targets = [
+            item
+            for item in ground.all_targets()
+            if item.controller is not player
+        ]
+        if remaining <= 0 or not targets:
+            return
         ground.damage(random.choice(targets), 1, card, DamageType.NONE)
+        if remaining > 1:
+            ground.schedule_action(130, lambda: hit(remaining - 1))
+
+    hit(8)
 
 
 CARD_DATA = CardData(

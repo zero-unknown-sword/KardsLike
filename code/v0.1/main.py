@@ -6093,7 +6093,7 @@ class BattleUI:
         screen: Surface,
         text: str,
         pos: tuple[int, int],
-        color: Color = (230, 230, 230),
+        color: Color = (191, 198, 179),
         font: Font | None = None,
         center: bool = False,
     ) -> None:
@@ -6431,15 +6431,8 @@ class BattleUI:
         )
         pygame.draw.rect(
             screen,
-            (48, 49, 41),
+            (39, 41, 34),
             area,
-            border_radius=max(2, area.width // 10),
-        )
-        pygame.draw.rect(
-            screen,
-            (119, 108, 82),
-            area,
-            1,
             border_radius=max(2, area.width // 10),
         )
 
@@ -6491,7 +6484,7 @@ class BattleUI:
         # 数值位置按 DIY 的 500x702 CSS 坐标换算
         # 费用: left 17, top 3, 45x95, 76px
         self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115)
-        self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (245, 245, 245))
+        self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (191, 198, 179))
         if not card.is_unit:
             return
         # 行动花费: left 62, top 45, 20x40, 33px
@@ -6499,7 +6492,7 @@ class BattleUI:
         self._draw_value(screen, str(card.operation_cost), rect, 0.144, 0.093, 0.047, (230, 230, 230))
         # 攻击: left 101, top 477, 56x70, 56px
         self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095)
-        at_color = (120, 255, 140) if card.at > card.initial_at else (235, 245, 235)
+        at_color = (120, 255, 140) if card.at > card.initial_at else (191, 198, 179)
         self._draw_value(screen, str(card.at), rect, 0.258, 0.729, 0.080, at_color)
         # 防御: left 343, top 477, 56x70, 56px
         self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095)
@@ -6508,7 +6501,7 @@ class BattleUI:
         elif card.max_df > card.initial_df:
             df_color = (120, 255, 140)
         else:
-            df_color = (250, 235, 235)
+            df_color = (191, 198, 179)
         self._draw_value(screen, str(card.df), rect, 0.742, 0.729, 0.080, df_color)
 
     def line_rects(self, screen: Surface, count: int, y: int) -> list[pygame.Rect]:
