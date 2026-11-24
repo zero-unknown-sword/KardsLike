@@ -6,7 +6,7 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from main import BattleGround, Card, CardData, CardTag, CardType, Country, Event, EventType, Procedure, Rarity
+from main import BattleGround, Card, CardData, CardTag, CardType, Country, Event, EventType, Player, Procedure, Rarity
 from mods.kards.code.veteran import VeteranProfile, promote, register_veteran
 
 
@@ -22,6 +22,22 @@ def promote_action(card: Card, event: Event, ground: BattleGround) -> None:
 
 BASE_PROC = Procedure(EventType.DAMAGED, damaged, promote_action)
 
+def veteran_aura(card: Card, event: Event, ground: BattleGround) -> None:
+    """为防御力为 1 的友方步兵提供 +2 攻击力"""
+    for line in (
+        ground.support_lines[Player.A],
+        ground.support_lines[Player.B],
+        ground.front_line,
+    ):
+        for unit in line.units:
+            if (
+                unit.controller is card.controller
+                and unit.type is CardType.INFANTRY
+                and unit.df == 1
+            ):
+                ground.add_aura(unit, at=2, source=card)
+
+
 VETERAN = VeteranProfile(
     at=3,
     df=3,
@@ -29,6 +45,7 @@ VETERAN = VeteranProfile(
     art="511th_regiment_vet.png",
     text="防御力为 1 的友方步兵具有 +2 攻击力。",
     keywords=["ambush"],
+    procedures=[Procedure(EventType.LOOP, lambda card, event, ground: True, veteran_aura)],
     base_procedures=[BASE_PROC],
     base_tags=[CardTag.DEFENSE_FLOOR_ONE],
 )

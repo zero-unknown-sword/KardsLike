@@ -6654,7 +6654,7 @@ class BattleUI:
         if not card.is_unit:
             return
         # 行动花费: left 62, top 45
-        self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065, (50, 51, 45))
+        self._cover(screen, rect, 0.124, 0.064, 0.040, 0.057, (50, 51, 45))
         self._draw_value(
             screen,
             str(card.operation_cost),
