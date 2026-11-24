@@ -1949,6 +1949,7 @@ class ChooseRequest:
     source: Card
     options: list[ChooseOption]
     cost: int = 0
+    hand_index: int = -1
 
 
 @dataclass
@@ -2928,7 +2929,7 @@ class BattleGround:
             提示文本; 可以行动时为空字符串
         """
         if card.suppressed:
-            return "该单位已被抑制，无法行动"
+            return "该单位已被压制，无法行动"
         if action == "move":
             if self.can_move_now(card):
                 return ""
@@ -3068,6 +3069,7 @@ class BattleGround:
             return True
         if card.type is CardType.ORDER:
             if card.has_tag(CardTag.CHOOSE):
+                hand_index = self.hands[player].cards.index(card)
                 if card in self.hands[player].cards:
                     self.hands[player].remove(card)
                 self.targets = self.all_targets()
@@ -3081,6 +3083,8 @@ class BattleGround:
                     ),
                     extra_cards=[card],
                 )
+                if self.pending_choose is not None:
+                    self.pending_choose.hand_index = hand_index
                 return True
             self.kredits[player].spend(effective_cost)
             if card.sub_type == "weather":
@@ -3348,6 +3352,10 @@ class BattleGround:
             return False
         self.pending_choose = None
         self.move_to_hand(request.source, request.player)
+        hand = self.hands[request.player]
+        if request.hand_index >= 0 and request.source in hand.cards:
+            hand.cards.remove(request.source)
+            hand.cards.insert(min(request.hand_index, len(hand.cards)), request.source)
         return True
 
     def unit_combat(self, attacker: Card, defender: Card) -> None:

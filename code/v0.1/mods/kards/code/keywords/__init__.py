@@ -24,6 +24,7 @@ from .intel import KEYWORD as INTEL
 from .shock import KEYWORD as SHOCK
 from .smoke import KEYWORD as SMOKE
 from .suppressed import KEYWORD as SUPPRESSED
+from .veteran import KEYWORD as VETERAN
 
 KEYWORDS: dict[str, KeywordData] = {
     "ambush": AMBUSH,
@@ -44,4 +45,5 @@ KEYWORDS: dict[str, KeywordData] = {
     "shock": SHOCK,
     "smoke": SMOKE,
     "suppressed": SUPPRESSED,
+    "veteran": VETERAN,
 }
