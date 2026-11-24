@@ -4727,6 +4727,8 @@ def load_mods() -> None:
 
 # 默认卡组池, 循环填满 39 张
 # 测试配置: 只保留 AT>=4 的单位, 提高抽牌与空军数量
+DEFAULT_DECK_NAME: str = "苏英弹药"
+"""默认卡组名称"""
 DEFAULT_DECK_POOL: list[str] = [
     # 开发
     "kards:card_air_land_sea",
@@ -4772,6 +4774,12 @@ DEFAULT_DECK_POOL: list[str] = [
     "kards:card_su100",
     "kards:card_soviet_military_research",
 ]
+
+
+DECKS: dict[str, list[str]] = {DEFAULT_DECK_NAME: DEFAULT_DECK_POOL}
+"""已命名的卡组, 默认卡组为苏英弹药"""
+DEFAULT_DECK: str = DEFAULT_DECK_NAME
+"""当前默认卡组名"""
 
 
 MAJOR_COUNTRIES: frozenset[Country] = frozenset(
@@ -4925,8 +4933,8 @@ def create_battle() -> BattleGround:
         guest_country=Country.BRITAIN,
         host_ally=Country.USA,
         guest_ally=Country.POLAND,
-        host_deck=DEFAULT_DECK_POOL,
-        guest_deck=DEFAULT_DECK_POOL,
+        host_deck=DECKS[DEFAULT_DECK],
+        guest_deck=DECKS[DEFAULT_DECK],
     )
     deck_a = make_deck(config.host_deck, Player.A, config.host_country)
     deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
