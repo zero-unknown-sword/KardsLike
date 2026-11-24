@@ -9,6 +9,7 @@ if str(_ROOT) not in sys.path:
 from main import (
     BattleGround,
     Card,
+    CardTag,
     CardData,
     CardType,
     ChooseOption,
@@ -67,6 +68,7 @@ CARD_DATA = CardData(
     text="抉择：获取 1 张气动雪橇，或获取 1 张扩展苏联研发。",
     art="soviet_military_research.png",
     rare=Rarity.ELITE,
+    tags=[CardTag.CHOOSE],
     procedures=[
         Procedure(
             EventType.USE,

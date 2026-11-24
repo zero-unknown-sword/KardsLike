@@ -9,6 +9,7 @@ if str(_ROOT) not in sys.path:
 from main import (
     BattleGround,
     Card,
+    CardTag,
     CardData,
     CardType,
     ChooseOption,

@@ -344,6 +344,8 @@ class CardTag(StrEnum):
     """拍桌等级提升 2 级"""
     NOT_IN_START = "NOT_IN_START"
     """构筑外, 不参与初始卡组构筑(TODO: 名称待定)"""
+    CHOOSE = "CHOOSE"
+    """使用前需要抉择: 预览不扣费, 结算后才支付"""
     SPECIAL_SOURCE = "SPECIAL_SOURCE"
     """系统特殊来源"""
     IN_START = "IN_START"
@@ -1946,6 +1948,7 @@ class ChooseRequest:
     player: Player
     source: Card
     options: list[ChooseOption]
+    cost: int = 0
 
 
 @dataclass
@@ -2913,6 +2916,71 @@ class BattleGround:
             level += 2
         return level >= 2
 
+    def action_block_reason(self, card: Card, action: str) -> str:
+        """
+        返回单位无法移动/攻击的原因。
+
+        Args:
+            card: 单位
+            action: "move" 或 "attack"
+
+        Returns:
+            提示文本; 可以行动时为空字符串
+        """
+        if card.suppressed:
+            return "该单位已被抑制，无法行动"
+        if action == "move":
+            if self.can_move_now(card):
+                return ""
+            if card.has_tag(CardTag.CANNOT_ACT_WHEN_ENTER):
+                return "无法在进入战场的同一回合行动"
+            if card.has_tag(CardTag.CANNOT_MOVE):
+                return "该单位无法移动"
+            if card.has_tag(CardTag.MOVED):
+                return "本单位本回合中已经移动过"
+            if card.has_tag(CardTag.ATTACKED):
+                return "本单位本回合中已经行动过"
+            return "该单位当前无法移动"
+        if self.can_attack_now(card):
+            return ""
+        if card.has_tag(CardTag.CANNOT_ACT_WHEN_ENTER):
+            return "无法在进入战场的同一回合行动"
+        if card.has_tag(CardTag.CANNOT_ATTACK):
+            return "该单位无法攻击"
+        if card.has_tag(CardTag.ATTACKED):
+            return "本单位本回合中已经攻击过"
+        if card.has_tag(CardTag.MOVED):
+            return "本单位本回合中已经行动过"
+        return "该单位当前无法攻击"
+
+    def use_block_reason(self, player: Player, card: Card) -> str:
+        """
+        返回卡牌无法使用的原因。
+
+        Args:
+            player: 使用者
+            card: 卡牌
+
+        Returns:
+            提示文本; 可以使用时为空字符串
+        """
+        if player is not self.turn_owner:
+            return "现在不是你的回合"
+        if self.pending_selection is not None or self.pending_choice is not None or self.pending_choose is not None:
+            return "请先完成当前选择"
+        if card not in self.hands[player].cards:
+            return "该卡不在你的手中"
+        if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
+            return "本回合已经使用过天气"
+        cost = card.effective_cost
+        if not self.kredits[player].can_afford(cost):
+            return f"剩余指挥点不足（需要 {cost} 点，当前 {self.kredits[player].credits} 点）"
+        if card.is_unit and len(self.support_lines[player].units) >= self.support_lines[player].capacity:
+            return "支援阵线已满，无法继续部署单位"
+        if not card.is_unit and card.type is not CardType.ORDER:
+            return "该卡当前无法使用"
+        return ""
+
     def use_card(self, player: Player, card: Card, index: int | None = None) -> bool:
         """
         使用手牌中的卡牌
@@ -2999,6 +3067,21 @@ class BattleGround:
                 finish_deploy()
             return True
         if card.type is CardType.ORDER:
+            if card.has_tag(CardTag.CHOOSE):
+                if card in self.hands[player].cards:
+                    self.hands[player].remove(card)
+                self.targets = self.all_targets()
+                self.emit(
+                    Event(
+                        EventType.USE,
+                        card=card,
+                        source=card,
+                        player=player,
+                        targets=list(self.targets),
+                    ),
+                    extra_cards=[card],
+                )
+                return True
             self.kredits[player].spend(effective_cost)
             if card.sub_type == "weather":
                 self.weather_used_turn[player] = self.turn_count
@@ -3224,7 +3307,7 @@ class BattleGround:
             return False
         if len(options) != 2:
             return False
-        self.pending_choose = ChooseRequest(player, source, options)
+        self.pending_choose = ChooseRequest(player, source, options, source.effective_cost)
         if self.kind_of(player) is PlayerKind.AI or player is Player.B:
             self.resolve_choose(random.choice(options))
         return True
@@ -3244,6 +3327,7 @@ class BattleGround:
             return False
         self.pending_choose = None
         source = request.source
+        self.kredits[request.player].spend(request.cost)
         if source in self.hands[request.player].cards:
             self.hands[request.player].remove(source)
         if source not in self.discards[request.player]:
@@ -5714,7 +5798,11 @@ class BattleUI:
             ground: 战斗全局参数
         """
         card = event.dict.get("card")
-        if isinstance(card, Card) and card.type is CardType.ORDER:
+        if (
+            isinstance(card, Card)
+            and card.type is CardType.ORDER
+            and not card.has_tag(CardTag.CHOOSE)
+        ):
             self.showcase.append((card, pygame.time.get_ticks()))
             rect = self.last_hand_rects.get(id(card))
             if rect is not None:
@@ -8145,10 +8233,14 @@ class BattleUI:
             card: 攻击单位
             target: 目标
         """
-        if ground.can_attack(Player.A, card, target) and ground.attack_unit(Player.A, card, target):
+        if not ground.can_attack(Player.A, card, target):
+            reason = ground.action_block_reason(card, "attack")
+            self.message = reason or "无法攻击：目标不合法或不在攻击范围内"
+            return
+        if ground.attack_unit(Player.A, card, target):
             self.message = ""
         else:
-            self.message = "无法攻击: 相邻关系为 支援阵线<->前线<->敌方支援阵线, 且每回合只能行动一次"
+            self.message = "无法攻击：目标不合法或不在攻击范围内"
 
     def on_mouse_up(self, pos: tuple[int, int], screen: Surface, ground: BattleGround) -> None:
         """
@@ -8174,7 +8266,7 @@ class BattleUI:
                 self.message = "已取消指向"
                 return
             if not ground.use_card(Player.A, card):
-                self.message = "无法使用该指令"
+                self.message = ground.use_block_reason(Player.A, card) or "无法使用该指令"
                 return
             if ground.pending_target is not None and not ground.resolve_target(target):
                 ground.cancel_target()
@@ -8205,13 +8297,15 @@ class BattleUI:
                     if pos[1] < self.own_hand_y:
                         origin = self.drag_origin or pygame.Rect(0, 0, self.card_w, self.card_h)
                         if ground.use_card(Player.A, card):
-                            if ground.pending_target is not None:
+                            if ground.pending_choose is not None:
+                                self.message = "请选择一项"
+                            elif ground.pending_target is not None:
                                 self.message = "选择目标"
                             else:
                                 self.message = "指令已使用"
                                 self._add_order_anim(origin)
                         else:
-                            self.message = "无法使用该指令"
+                            self.message = ground.use_block_reason(Player.A, card) or "无法使用该指令"
                     self._clear_drag()
                     return
                 if support_area.collidepoint(pos):
@@ -8222,7 +8316,7 @@ class BattleUI:
                         else:
                             self.message = ""
                     else:
-                        self.message = "无法部署该单位"
+                        self.message = ground.use_block_reason(Player.A, card) or "无法部署该单位"
                 self._clear_drag()
                 return
 
@@ -8245,7 +8339,7 @@ class BattleUI:
                 if ground.move_unit(Player.A, card, own_support, index):
                     self.message = "单位已移动"
                 else:
-                    self.message = "无法移动该单位"
+                    self.message = ground.action_block_reason(card, "move") or "无法移动该单位"
                 return
             if front_area.collidepoint(pos):
                 if card.line is front:
@@ -8255,7 +8349,7 @@ class BattleUI:
                 if ground.move_unit(Player.A, card, front, index):
                     self.message = "单位已移动到前线"
                 else:
-                    self.message = "无法移动该单位"
+                    self.message = ground.action_block_reason(card, "move") or "无法移动该单位"
         finally:
             self._clear_drag()
 
