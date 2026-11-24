@@ -2035,6 +2035,10 @@ class ShadowTimer:
     action: Callable[[], None]
 
 
+DEPLOY_FALLBACK_HOOKS: list[Callable[["BattleGround", Player, Card], None]] = []
+"""部署兜底流程钩子, 在部署效果之后、ENTER 之前按注册顺序执行"""
+
+
 class BattleGround:
     """
     战斗全局参数
@@ -3015,7 +3019,6 @@ class BattleGround:
             targeted_deploy = card.target_valid is not None
             if not targeted_deploy:
                 self.kredits[player].spend(effective_cost)
-                self.check_bond(player, card)
             card.owner = player
             card.controller = player
             operation_cost = card.operation_cost
@@ -3054,10 +3057,11 @@ class BattleGround:
                     return
                 paid = True
                 self.kredits[player].spend(effective_cost)
-                self.check_bond(player, card)
 
             def finish_deploy() -> None:
                 pay_deploy()
+                for hook in DEPLOY_FALLBACK_HOOKS:
+                    hook(self, player, card)
                 if card.zone is not Zone.BOARD:
                     return
                 self.emit(enter_event)
@@ -3489,6 +3493,8 @@ class BattleGround:
                 )
             )
             self._resolve_auto_target()
+            for hook in DEPLOY_FALLBACK_HOOKS:
+                hook(self, player, card)
             if card.zone is Zone.BOARD:
                 self.emit(
                     Event(
@@ -4568,6 +4574,9 @@ def _load_mod(mod_dir: Path, mod_id: str, info: ModInfo) -> None:
                 for key, value in _string_dict(zh_data).items():
                     if isinstance(value, dict):
                         cards.zh[key] = _string_dict(value)
+    hooks_file = code_dir / "hooks.py"
+    if hooks_file.is_file():
+        _load_module(f"mods.{mod_id}.code.hooks", hooks_file)
     cards_dir = code_dir / "cards"
     if not cards_dir.is_dir():
         return
