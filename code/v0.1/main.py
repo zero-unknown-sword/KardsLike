@@ -548,15 +548,6 @@ class EventType(IntEnum):
         way: LeaveMethod
         source: 来源卡牌或 None
     """
-    DEPLOY = pygame.event.custom_type()
-    """
-    单位部署, 在 ENTER 之前触发
-
-    数据:
-        card: 部署的单位
-        player: 控制者
-        method: EntryMethod
-    """
     ENTER = pygame.event.custom_type()
     """
     单位进入场上, 包括部署与效果加入
@@ -635,15 +626,6 @@ class EventType(IntEnum):
     数据:
         player: 情报使用方
         amount: 溢出数量
-    """
-    DEVELOP = pygame.event.custom_type()
-    """
-    开发选取完成
-
-    数据:
-        card: 选中的卡牌
-        player: 选取方
-        source: 开发来源
     """
     LOOT = pygame.event.custom_type()
     """
@@ -3030,17 +3012,16 @@ class BattleGround:
             self.support_lines[player].add(card, index)
             card.zone = Zone.BOARD
             card.add_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
-            use_event = Event(EventType.USE, card=card, source=card, player=player, targets=[])
+            use_event = Event(
+                EventType.USE,
+                card=card,
+                source=card,
+                player=player,
+                targets=[],
+                method=EntryMethod.DEPLOY,
+            )
             self.emit(use_event)
             deferred = card.has_tag(CardTag.SLAM_UP_2)
-            self.emit(
-                Event(
-                    EventType.DEPLOY,
-                    card=card,
-                    player=player,
-                    method=EntryMethod.DEPLOY,
-                )
-            )
             enter_event = Event(
                 EventType.ENTER,
                 card=card,
@@ -3483,12 +3464,13 @@ class BattleGround:
             card.zone = Zone.BOARD
             card.add_tag(CardTag.CANNOT_ACT_WHEN_ENTER)
             self.targets = self.all_targets()
-            self.emit(Event(EventType.USE, card=card, source=card, player=player, targets=[]))
             self.emit(
                 Event(
-                    EventType.DEPLOY,
+                    EventType.USE,
                     card=card,
+                    source=card,
                     player=player,
+                    targets=[],
                     method=EntryMethod.DEPLOY,
                 )
             )
@@ -3629,15 +3611,6 @@ class BattleGround:
             self.shuffle_deck(choice.player)
         remaining = [other for other in choice.cards if other is not card]
         self.last_choice_result = (card, remaining)
-        if choice.develop:
-            self.emit(
-                Event(
-                    EventType.DEVELOP,
-                    card=card,
-                    player=choice.player,
-                    source=choice.source,
-                )
-            )
         if choice.loot_event:
             self.emit(
                 Event(

@@ -45,5 +45,5 @@ CARD_DATA = CardData(
     df=1,
     operation_cost=1,
     sub_type="commando",
-    procedures=[Procedure(EventType.DEPLOY, deployed, action)],
+    procedures=[Procedure(EventType.USE, deployed, action)],
 )

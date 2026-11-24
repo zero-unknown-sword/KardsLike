@@ -63,7 +63,7 @@ CARD_DATA = CardData(
     keywords=[BLITZ],
     procedures=[
         Procedure(
-            EventType.DEPLOY,
+            EventType.USE,
             deployed,
             action,
         )

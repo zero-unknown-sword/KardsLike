@@ -58,5 +58,5 @@ CARD_DATA = CardData(
     df=5,
     operation_cost=1,
     keywords=[AMBUSH],
-    procedures=[Procedure(EventType.DEPLOY, deployed, action)],
+    procedures=[Procedure(EventType.USE, deployed, action)],
 )

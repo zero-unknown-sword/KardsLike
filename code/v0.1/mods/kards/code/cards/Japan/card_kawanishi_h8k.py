@@ -93,7 +93,7 @@ CARD_DATA = CardData(
             draw_on_forecast,
         ),
         Procedure(
-            EventType.DEPLOY,
+            EventType.USE,
             deployed,
             deploy_forecast,
         ),

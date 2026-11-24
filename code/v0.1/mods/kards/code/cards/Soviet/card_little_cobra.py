@@ -51,5 +51,5 @@ CARD_DATA = CardData(
     df=5,
     operation_cost=2,
     keywords=[BLITZ],
-    procedures=[Procedure(EventType.DEPLOY, deployed, action)],
+    procedures=[Procedure(EventType.USE, deployed, action)],
 )

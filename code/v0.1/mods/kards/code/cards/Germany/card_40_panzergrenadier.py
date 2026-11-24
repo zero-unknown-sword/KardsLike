@@ -93,7 +93,7 @@ CARD_DATA = CardData(
     operation_cost=1,
     procedures=[
         Procedure(
-            EventType.DEPLOY,
+            EventType.USE,
             deployed,
             action,
             target_valid=target_valid,

@@ -57,5 +57,5 @@ CARD_DATA = CardData(
     df=6,
     operation_cost=2,
     keywords=[GUARD],
-    procedures=[Procedure(EventType.DEPLOY, deployed, action)],
+    procedures=[Procedure(EventType.USE, deployed, action)],
 )
