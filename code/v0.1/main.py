@@ -6512,10 +6512,20 @@ class BattleUI:
         if start + total > right:
             start = right - total
         start = max(left, start)
-        return [
-            pygame.Rect(start + i * (self.card_w + gap), self.own_hand_y, self.card_w, self.card_h)
-            for i in range(count)
-        ]
+        mid = max(1.0, (count - 1) / 2)
+        result: list[pygame.Rect] = []
+        for i in range(count):
+            distance = abs(i - (count - 1) / 2) / mid
+            lift = int((1.0 - distance) * self.card_h * 0.028)
+            result.append(
+                pygame.Rect(
+                    start + i * (self.card_w + gap),
+                    self.own_hand_y - lift,
+                    self.card_w,
+                    self.card_h,
+                )
+            )
+        return result
 
     def line_items(
         self,
@@ -7445,7 +7455,17 @@ class BattleUI:
         self.last_hand_rects = {}
         now = pygame.time.get_ticks()
         request = ground.pending_selection
-        for rect, card in zip(self.hand_rects(screen, len(own_hand)), own_hand):
+        base_rects = self.hand_rects(screen, len(own_hand))
+        mouse = pygame.mouse.get_pos()
+        hovered_index = -1
+        if self.drag_card is None:
+            for index, rect in enumerate(base_rects):
+                if rect.inflate(8, 8).collidepoint(mouse):
+                    hovered_index = index
+        count = len(own_hand)
+        max_angle = 0.0 if count <= 1 else min(3.2, 22.0 / (count - 1))
+        mid = (count - 1) / 2
+        for index, (rect, card) in enumerate(zip(base_rects, own_hand)):
             if any(anim_card is card for anim_card, _, _ in self.choice_move_anims):
                 continue
             reveal = self.hand_reveal.get(id(card))
@@ -7453,18 +7473,38 @@ class BattleUI:
                 if now < reveal:
                     continue
                 self.hand_reveal.pop(id(card), None)
-            self.last_hand_rects[id(card)] = rect.copy()
-            self._blit_card(screen, card, rect)
+            dragging = card is self.drag_card and self.drag_from_hand
+            selected = card is self.selected_hand
+            hover_lift = int(self.card_h * 0.18) if index == hovered_index and not dragging else 0
+            angle = (index - mid) * max_angle
+            visual_rect = pygame.Rect(rect.x, rect.y - hover_lift, rect.width, rect.height)
+            surface = pygame.Surface((self.card_w, self.card_h), pygame.SRCALPHA)
+            art = self._card_art(card)
+            if art is None:
+                art = self.face
+            if art.get_size() != (self.card_w, self.card_h):
+                art = pygame.transform.smoothscale(art, (self.card_w, self.card_h))
+            surface.blit(art, (0, 0))
+            self._draw_stats_overlay(surface, card, pygame.Rect(0, 0, self.card_w, self.card_h))
+            border = (255, 210, 80) if (selected or dragging or index == hovered_index) else (220, 220, 220)
+            pygame.draw.rect(
+                surface,
+                border,
+                (0, 0, self.card_w, self.card_h),
+                3 if (selected or dragging or index == hovered_index) else 2,
+                border_radius=4,
+            )
+            rotated = pygame.transform.rotozoom(surface, angle, 1.0)
+            visual_rect = rotated.get_rect(center=(rect.centerx, rect.y + self.card_h // 2 - hover_lift))
+            self.last_hand_rects[id(card)] = visual_rect.copy()
+            screen.blit(rotated, visual_rect)
             if card.revealed:
                 size = max(14, int(self.card_w * 0.18))
                 eye = pygame.transform.smoothscale(self.eye_image, (size, size))
-                screen.blit(eye, (rect.x + 4, rect.centery - size // 2))
+                eye_pos = (visual_rect.x + 4, visual_rect.centery - size // 2)
+                screen.blit(eye, eye_pos)
             if request is not None and card in self.selection_cards:
-                self._draw_selection_stamp(screen, rect)
-            dragging = card is self.drag_card and self.drag_from_hand
-            selected = card is self.selected_hand
-            border = (255, 210, 80) if (selected or dragging) else (220, 220, 220)
-            pygame.draw.rect(screen, border, rect, 3 if (selected or dragging) else 2, border_radius=4)
+                self._draw_selection_stamp(screen, visual_rect)
 
     def _draw_status(self, screen: Surface, ground: BattleGround) -> None:
         """绘制双方指挥点、提示与结束回合按钮"""
