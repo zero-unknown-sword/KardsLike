@@ -6522,7 +6522,9 @@ class BattleUI:
         for i in range(count):
             center_x = start + i * (self.card_w + gap) + self.card_w / 2
             dx = center_x - pivot_x
-            center_y = pivot_y - math.sqrt(max(0.0, radius * radius - dx * dx))
+            arc_offset = radius - math.sqrt(max(0.0, radius * radius - dx * dx))
+            # 压低弧度, 保持扇形但不要把两侧拉得过低
+            center_y = base_center_y + arc_offset * 0.32
             result.append(
                 pygame.Rect(
                     int(center_x - self.card_w / 2),
@@ -7493,7 +7495,7 @@ class BattleUI:
             hover_lift = int(self.card_h * 0.18) if index == hovered_index and not dragging else 0
             center_y = rect.y + self.card_h / 2
             radial = max(1.0, pivot_y - center_y)
-            angle = -math.degrees(math.atan2(rect.centerx - pivot_x, radial))
+            angle = -math.degrees(math.atan2(rect.centerx - pivot_x, radial)) * 0.55
             visual_rect = pygame.Rect(rect.x, rect.y - hover_lift, rect.width, rect.height)
             surface = pygame.Surface((self.card_w, self.card_h), pygame.SRCALPHA)
             art = self._card_art(card)
