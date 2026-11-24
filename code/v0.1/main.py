@@ -354,6 +354,8 @@ class CardTag(StrEnum):
     """不会失去冲击"""
     UNINHIBITABLE = "UNINHIBITABLE"
     """不能被抑制"""
+    DEFENSE_FLOOR_ONE = "DEFENSE_FLOOR_ONE"
+    """防御力不会被降到 1 以下"""
 
 
 class EntryMethod(StrEnum):
@@ -1329,7 +1331,8 @@ class Card:
         Returns:
             是否被消灭
         """
-        self.df -= amount
+        floor = 1 if self.has_tag(CardTag.DEFENSE_FLOOR_ONE) else 0
+        self.df = max(floor, self.df - amount) if floor else self.df - amount
         self.damage_amount = amount
         self.damage_time = pygame.time.get_ticks()
         if self.df <= 0:

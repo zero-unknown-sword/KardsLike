@@ -6,7 +6,7 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from main import BattleGround, Card, CardData, CardType, Country, Event, EventType, Procedure, Rarity
+from main import BattleGround, Card, CardData, CardTag, CardType, Country, Event, EventType, Procedure, Rarity
 from mods.kards.code.veteran import VeteranProfile, promote, register_veteran
 
 
@@ -30,6 +30,7 @@ VETERAN = VeteranProfile(
     text="防御力为 1 的友方步兵具有 +2 攻击力。",
     keywords=["ambush"],
     base_procedures=[BASE_PROC],
+    base_tags=[CardTag.DEFENSE_FLOOR_ONE],
 )
 
 CARD_DATA = CardData(
@@ -43,6 +44,7 @@ CARD_DATA = CardData(
     at=3,
     df=2,
     operation_cost=1,
+    tags=[CardTag.DEFENSE_FLOOR_ONE],
     procedures=[BASE_PROC],
 )
 
