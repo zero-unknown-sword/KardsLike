@@ -5057,21 +5057,28 @@ SAVE_DIR: Path = Path(__file__).resolve().parent / "saves"
 LAST_SAVE_FILE: Path = SAVE_DIR / "last.txt"
 DEFAULT_ADD_DECK_DELAY: int = 300
 
-DEFAULT_THANKS: dict[str, Any] = {
-    "设计": {
-        "awa猫猫awa": {
-            "贡献": "提供玩法设计灵感",
-            "bilibili": "1297979318",
-        }
-    },
-    "特别鸣谢": {
-        "柴某不添柴": {
-            "鸣谢": "一位退圈的kards up主",
-            "bilibili": "3546667764681371",
-        }
-    },
-}
-"""默认鸣谢内容, 原 configs/thanks.json"""
+THANKS_FILE: Path = Path(__file__).resolve().parent / "configs" / "thanks.json"
+"""鸣谢配置文件"""
+
+
+def load_thanks() -> dict[str, Any]:
+    """从 configs/thanks.json 读取鸣谢内容。
+
+    Returns:
+        鸣谢数据, 文件缺失或损坏时为空字典
+    """
+    if not THANKS_FILE.is_file():
+        return {}
+    try:
+        raw = cast(object, json.loads(THANKS_FILE.read_text(encoding="utf-8-sig")))
+    except (OSError, ValueError) as exc:
+        logger.warning("鸣谢读取失败 %s: %s", THANKS_FILE, exc)
+        return {}
+    return _string_dict(raw)
+
+
+DEFAULT_THANKS: dict[str, Any] = load_thanks()
+"""默认鸣谢内容, 来自 configs/thanks.json"""
 
 
 @dataclass
@@ -5191,12 +5198,7 @@ def load_or_create_save() -> SaveData:
                 mods.append(item)
     if not mods:
         mods = sorted(cards.mods)
-    thanks_raw = raw.get("thanks")
-    thanks = (
-        _string_dict(thanks_raw)
-        if isinstance(thanks_raw, dict)
-        else DEFAULT_THANKS
-    )
+    thanks = load_thanks()
     if not thanks:
         thanks = DEFAULT_THANKS
     data = SaveData(
