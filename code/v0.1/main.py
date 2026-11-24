@@ -960,6 +960,7 @@ class Card:
         self.overflow_damage: int = 0
         self.suppressed: bool = False
         self.suppressed_turn: int = -1
+        self.suppressed_until_turn: int = -1
         self.ambush_used_turn: int = -1
         self.attacks_turn: int = 0
         self.aura_at: int = 0
@@ -1139,6 +1140,7 @@ class Card:
         self.keywords = list(self.base_keywords)
         self.suppressed = False
         self.suppressed_turn = -1
+        self.suppressed_until_turn = -1
         self.ambush_used_turn = -1
         self.attacks_turn = 0
         self.deployed_turn = -1
@@ -2712,6 +2714,13 @@ class BattleGround:
         ):
             for unit in line.units:
                 if (
+                    unit.suppressed
+                    and unit.suppressed_until_turn >= 0
+                    and self.turn_count >= unit.suppressed_until_turn
+                ):
+                    unit.suppressed = False
+                    unit.suppressed_until_turn = -1
+                elif (
                     unit.controller is player
                     and unit.suppressed
                     and self.turns_taken[player] >= unit.suppressed_turn + 1
@@ -3242,18 +3251,21 @@ class BattleGround:
         if pending is not None and pending.cancel is not None:
             pending.cancel()
 
-    def suppress(self, card: Card) -> None:
+    def suppress(self, card: Card, until_turn_end: bool = False) -> None:
         """
-        压制一个单位, 直到其所有者下个回合结束
+        压制一个单位
 
         Args:
             card: 单位
+            until_turn_end: 是否在本次回合结束时移除压制
         """
         if card.zone is not Zone.BOARD:
             return
         owner = card.controller
         card.suppressed = True
         card.suppressed_turn = self.turns_taken[owner]
+        if until_turn_end:
+            card.suppressed_until_turn = self.turn_count
 
     def start_card_choice(
         self,
@@ -5533,6 +5545,7 @@ class BattleUI:
         self.damage_bullets: list[
             tuple[tuple[int, int], tuple[int, int], int]
         ] = []
+        self.attack_fx: list[tuple[tuple[int, int], tuple[int, int], int]] = []
         self.choice_move_anims: list[tuple[Card, pygame.Rect, int]] = []
         self.opp_eye_rect: pygame.Rect | None = None
         self.reveal_hover_start: int = 0
@@ -5629,6 +5642,7 @@ class BattleUI:
         self.return_anims.clear()
         self.deck_add_anims.clear()
         self.damage_bullets.clear()
+        self.attack_fx.clear()
         self.choice_move_anims.clear()
         self.opp_eye_rect = None
         self.reveal_hover_active = False
@@ -5662,6 +5676,7 @@ class BattleUI:
         ground.add_hook(EventType.RETREAT, self._on_move_event)
         ground.add_hook(EventType.ADD_TO_DECK, self._on_add_deck_event)
         ground.add_hook(EventType.DAMAGED, self._on_damaged_event)
+        ground.add_hook(EventType.ATTACK, self._on_attack_event)
         ground.add_hook(EventType.CHOICE_RESOLVED, self._on_choice_resolved)
         self.hooked_ground = ground
 
@@ -5722,6 +5737,59 @@ class BattleUI:
         self.damage_bullets.append(
             (source_pos, target_pos, pygame.time.get_ticks())
         )
+
+    def _on_attack_event(self, event: Event, ground: BattleGround) -> None:
+        """记录单位攻击, 用于播放枪口闪光和射击轨迹。
+
+        Args:
+            event: ATTACK 事件
+            ground: 战斗全局参数
+        """
+        card = event.dict.get("card")
+        target = event.dict.get("target")
+        if not isinstance(card, Card) or not isinstance(target, Card):
+            return
+
+        def position(item: Card) -> tuple[int, int] | None:
+            record = self.frame_rects.get(id(item))
+            if record is not None:
+                return record[1].center
+            return None
+
+        source_pos = position(card)
+        target_pos = position(target)
+        if source_pos is None or target_pos is None:
+            return
+        self.attack_fx.append((source_pos, target_pos, pygame.time.get_ticks()))
+
+    def _draw_attack_fx(self, screen: Surface) -> None:
+        """绘制单位攻击的枪口闪光与短促射击轨迹。
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if not self.attack_fx:
+            return
+        now = pygame.time.get_ticks()
+        alive: list[tuple[tuple[int, int], tuple[int, int], int]] = []
+        for source, target, start in self.attack_fx:
+            elapsed = now - start
+            if elapsed > 260:
+                continue
+            alive.append((source, target, start))
+            flash = max(0.0, 1.0 - elapsed / 180)
+            if flash > 0:
+                radius = max(3, int(self.card_w * 0.06 * flash))
+                pygame.draw.circle(screen, (255, 225, 135), source, radius + 2)
+                pygame.draw.circle(screen, (255, 255, 230), source, max(2, radius // 2))
+            tracer = max(0.0, 1.0 - elapsed / 220)
+            if tracer > 0:
+                end = (
+                    int(source[0] + (target[0] - source[0]) * (1.0 - tracer * 0.35)),
+                    int(source[1] + (target[1] - source[1]) * (1.0 - tracer * 0.35)),
+                )
+                pygame.draw.line(screen, (255, 190, 100), source, end, 2)
+        self.attack_fx = alive
 
     def _draw_bullets(self, screen: Surface) -> None:
         """
@@ -6803,6 +6871,7 @@ class BattleUI:
         self._draw_death_marks(screen)
         self._draw_deck_add_anims(screen, ground)
         self._draw_bullets(screen)
+        self._draw_attack_fx(screen)
         self._draw_decks(screen, ground)
         self._draw_draw_anims(screen, ground)
         self._draw_return_anims(screen, ground)

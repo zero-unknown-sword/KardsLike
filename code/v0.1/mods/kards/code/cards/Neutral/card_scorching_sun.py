@@ -28,7 +28,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
     units = [item for item in list(ground.hands[player].cards) if item.is_unit]
     for unit in units:
         if ground.add_unit(player, unit):
-            ground.suppress(unit)
+            ground.suppress(unit, until_turn_end=True)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,

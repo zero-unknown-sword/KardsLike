@@ -41,7 +41,7 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         copy.df = target.df
         copy.max_df = target.max_df
         copy.keywords = list(target.keywords)
-        ground.suppress(copy)
+        ground.suppress(copy, until_turn_end=True)
 
     ground.request_target(
         player,
