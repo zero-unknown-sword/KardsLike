@@ -6495,21 +6495,28 @@ class BattleUI:
             screen.blit(image, (x, y))
             pygame.draw.rect(screen, (25, 25, 25), (x, y, size, size), 1)
             if kind in ("armor", "countdown"):
-                font_size = max(10, int(size * 0.62))
+                font_size = max(10, int(size * (0.46 if kind == "countdown" else 0.62)))
                 font = self.font_cache.get(font_size)
                 if font is None:
                     font = load_font(font_size)
                     self.font_cache[font_size] = font
                 text = str(value)
-                shadow = font.render(text, True, (30, 24, 10))
-                number = font.render(text, True, (255, 255, 255))
-                center = (x + size // 2, y + size // 2)
-                for offset in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    screen.blit(
-                        shadow,
-                        shadow.get_rect(center=(center[0] + offset[0], center[1] + offset[1])),
-                    )
-                screen.blit(number, number.get_rect(center=center))
+                if kind == "countdown":
+                    badge_center = (x + int(size * 0.82), y + int(size * 0.82))
+                    pygame.draw.circle(screen, (30, 27, 18), badge_center, max(6, size // 3))
+                    pygame.draw.circle(screen, (205, 170, 95), badge_center, max(6, size // 3), 1)
+                    number = font.render(text, True, (255, 240, 200))
+                    screen.blit(number, number.get_rect(center=badge_center))
+                else:
+                    shadow = font.render(text, True, (30, 24, 10))
+                    number = font.render(text, True, (255, 255, 255))
+                    center = (x + size // 2, y + size // 2)
+                    for offset in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                        screen.blit(
+                            shadow,
+                            shadow.get_rect(center=(center[0] + offset[0], center[1] + offset[1])),
+                        )
+                    screen.blit(number, number.get_rect(center=center))
             y += size + gap
 
     def _draw_all_keyword_icons(self, screen: Surface, ground: BattleGround) -> None:
