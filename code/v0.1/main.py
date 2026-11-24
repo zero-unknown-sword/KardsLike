@@ -4780,6 +4780,46 @@ DECKS: dict[str, list[str]] = {DEFAULT_DECK_NAME: DEFAULT_DECK_POOL}
 """已命名的卡组, 默认卡组为苏英弹药"""
 DEFAULT_DECK: str = DEFAULT_DECK_NAME
 """当前默认卡组名"""
+DECK_DIR: Path = Path(__file__).resolve().parent / "mods" / "kards" / "data" / "decks"
+"""卡组数据目录"""
+_DECKS_LOADED: bool = False
+
+
+def load_decks() -> None:
+    """从 mods/kards/data/decks 读取命名卡组。
+
+    卡组文件只保存卡牌 id, 卡牌对象和属性仍由卡牌数据统一创建。
+    """
+    global _DECKS_LOADED
+    if _DECKS_LOADED:
+        return
+    _DECKS_LOADED = True
+    if not DECK_DIR.is_dir():
+        return
+    for path in sorted(DECK_DIR.glob("*.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            logger.warning("卡组读取失败 %s: %s", path, exc)
+            continue
+        if not isinstance(raw, dict):
+            continue
+        name = raw.get("name", path.stem)
+        card_ids = raw.get("cards")
+        if not isinstance(name, str) or not isinstance(card_ids, list):
+            continue
+        valid = [item for item in card_ids if isinstance(item, str)]
+        if valid:
+            DECKS[name] = valid
+
+
+def default_deck_ids() -> list[str]:
+    """返回当前默认卡组的卡牌 id 列表。"""
+    load_decks()
+    return DECKS.get(DEFAULT_DECK, DEFAULT_DECK_POOL)
+
+
+""
 
 
 MAJOR_COUNTRIES: frozenset[Country] = frozenset(
@@ -4933,8 +4973,8 @@ def create_battle() -> BattleGround:
         guest_country=Country.BRITAIN,
         host_ally=Country.USA,
         guest_ally=Country.POLAND,
-        host_deck=DECKS[DEFAULT_DECK],
-        guest_deck=DECKS[DEFAULT_DECK],
+        host_deck=default_deck_ids(),
+        guest_deck=default_deck_ids(),
     )
     deck_a = make_deck(config.host_deck, Player.A, config.host_country)
     deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
