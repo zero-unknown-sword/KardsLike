@@ -3012,8 +3012,10 @@ class BattleGround:
         if card.is_unit:
             if len(self.support_lines[player].units) >= self.support_lines[player].capacity:
                 return False
-            self.kredits[player].spend(effective_cost)
-            self.check_bond(player, card)
+            targeted_deploy = card.target_valid is not None
+            if not targeted_deploy:
+                self.kredits[player].spend(effective_cost)
+                self.check_bond(player, card)
             card.owner = player
             card.controller = player
             operation_cost = card.operation_cost
@@ -3044,7 +3046,18 @@ class BattleGround:
                 deferred_card=card if deferred else None,
             )
 
+            paid = not targeted_deploy
+
+            def pay_deploy() -> None:
+                nonlocal paid
+                if paid:
+                    return
+                paid = True
+                self.kredits[player].spend(effective_cost)
+                self.check_bond(player, card)
+
             def finish_deploy() -> None:
+                pay_deploy()
                 if card.zone is not Zone.BOARD:
                     return
                 self.emit(enter_event)
@@ -3062,7 +3075,12 @@ class BattleGround:
             self.apply_intel(player, card)
             if self.pending_target is not None:
                 # 部署效果先结算, 结算完成后再广播 ENTER
-                self.pending_target.cancel = lambda: self.cancel_deploy(player, card, effective_cost)
+                self.pending_target.cancel = lambda: self.cancel_deploy(
+                    player,
+                    card,
+                    effective_cost,
+                    refund=not targeted_deploy,
+                )
                 self.pending_target.finish = finish_deploy
             else:
                 finish_deploy()
@@ -3872,14 +3890,21 @@ class BattleGround:
 
             self.schedule_action(1200, draw_replacement)
 
-    def cancel_deploy(self, player: Player, card: Card, cost: int) -> None:
+    def cancel_deploy(
+        self,
+        player: Player,
+        card: Card,
+        cost: int,
+        refund: bool = True,
+    ) -> None:
         """
-        取消一次部署, 把单位收回手牌并退还费用
+        取消一次部署, 把单位收回手牌；按需退还费用
 
         Args:
             player: 部署方
             card: 被部署的单位
             cost: 部署花费
+            refund: 是否退还费用；指向部署在选目标前尚未扣费
         """
         if card.line is not None:
             card.line.remove(card)
@@ -3890,7 +3915,11 @@ class BattleGround:
         # 收回手牌时清除部署期间获得的光环和临时属性
         card.clear_auras()
         card.clear_temporary()
-        self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
+        if refund:
+            self.kredits[player].credits = min(
+                self.kredits[player].credits + cost,
+                self.kredits[player].slots,
+            )
 
     def finish_order(self, player: Player, card: Card) -> None:
         """
