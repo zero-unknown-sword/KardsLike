@@ -4808,7 +4808,16 @@ def load_decks() -> None:
         card_ids = raw.get("cards")
         if not isinstance(name, str) or not isinstance(card_ids, list):
             continue
-        valid = [item for item in card_ids if isinstance(item, str)]
+        valid = [
+            item for item in card_ids
+            if isinstance(item, str) and cards.has(item)
+        ]
+        missing = [
+            item for item in card_ids
+            if isinstance(item, str) and not cards.has(item)
+        ]
+        if missing:
+            logger.warning("卡组 %s 含未实现卡牌, 已忽略: %s", name, ", ".join(missing))
         if valid:
             DECKS[name] = valid
 
@@ -4971,7 +4980,7 @@ def create_battle() -> BattleGround:
         guest_kind=PlayerKind.AI,
         host_country=Country.SOVIET,
         guest_country=Country.BRITAIN,
-        host_ally=Country.USA,
+        host_ally=Country.BRITAIN,
         guest_ally=Country.POLAND,
         host_deck=default_deck_ids(),
         guest_deck=default_deck_ids(),
