@@ -3661,7 +3661,7 @@ class BattleGround:
             destination=Zone.HAND,
             develop=True,
             origin_deck=True,
-            title="开发",
+            title="发现：开发",
         )
 
     def develop_from_pool(self, player: Player, source: Card) -> bool:
@@ -3710,7 +3710,7 @@ class BattleGround:
             destination=Zone.HAND,
             develop=True,
             origin_deck=False,
-            title="开发",
+            title="发现：开发",
         )
 
     def loot_from_deck(self, player: Player, source: Card) -> bool:
@@ -3738,7 +3738,7 @@ class BattleGround:
             origin_deck=True,
             unselected_bottom=True,
             loot_event=True,
-            title="战利品",
+            title="发现：战利品",
         )
 
     def start_selection(
