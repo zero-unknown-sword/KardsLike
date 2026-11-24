@@ -6315,7 +6315,7 @@ class BattleUI:
         Returns:
             卡图, 不存在时为 None
         """
-        key = card.name
+        key = f"{card.name}:{card.art}"
         if key in self.art_cache:
             return self.art_cache[key]
         art = card.art
@@ -6550,6 +6550,7 @@ class BattleUI:
         fy: float,
         fw: float,
         fh: float,
+        color: Color = (58, 61, 54),
     ) -> None:
         """
         按比例用黑色遮住卡面上的一小块区域
@@ -6570,7 +6571,7 @@ class BattleUI:
         )
         pygame.draw.rect(
             screen,
-            (39, 41, 34),
+            color,
             area,
             border_radius=max(2, area.width // 10),
         )
@@ -6624,13 +6625,13 @@ class BattleUI:
         """
         # 费用: DIY 500x702 坐标 left 17, top 3, 45x95, 76px
         if card.cost != card.initial_cost:
-            self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115)
+            self._cover(screen, rect, 0.015, 0.015, 0.100, 0.115, (49, 51, 46))
             self._draw_value(screen, str(card.cost), rect, 0.079, 0.072, 0.108, (191, 198, 179))
         if not card.is_unit:
             return
         # 行动花费: left 62, top 45, 20x40, 33px
         if card.operation_cost != card.initial_operation_cost:
-            self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065)
+            self._cover(screen, rect, 0.112, 0.060, 0.076, 0.065, (50, 51, 45))
             self._draw_value(
                 screen,
                 str(card.operation_cost),
@@ -6642,12 +6643,12 @@ class BattleUI:
             )
         # 攻击: left 101, top 477, 56x70, 56px
         if card.at != card.initial_at:
-            self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095)
+            self._cover(screen, rect, 0.215, 0.680, 0.105, 0.095, (58, 61, 54))
             at_color = (120, 255, 140) if card.at > card.initial_at else (191, 198, 179)
             self._draw_value(screen, str(card.at), rect, 0.258, 0.729, 0.080, at_color)
         # 防御: left 343, top 477, 56x70, 56px
         if card.df != card.initial_df or card.max_df != card.initial_df:
-            self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095)
+            self._cover(screen, rect, 0.690, 0.680, 0.110, 0.095, (69, 71, 66))
             if card.df < card.max_df:
                 df_color = (255, 90, 90)
             elif card.max_df > card.initial_df:
