@@ -1526,6 +1526,10 @@ class Deck:
         self.main_country: Country = main_country
         self.ally_country: Country | None = ally_country
 
+    def to_code(self) -> str:
+        """返回 KARDS 官方格式的卡组代码。"""
+        return encode_deck_code(self)
+
     def draw(self) -> Card | None:
         """
         从卡组顶抽一张牌, 卡组为空时返回 None
@@ -5058,6 +5062,103 @@ def validate_deck(
     return errors
 
 
+DECK_CODE_FILE: Path = Path(__file__).resolve().parent / "mods" / "kards" / "data" / "deckcodes.json"
+"""官方两字符卡组代码映射"""
+_COUNTRY_CODES: dict[Country, str] = {
+    Country.GERMANY: "1",
+    Country.BRITAIN: "2",
+    Country.JAPAN: "3",
+    Country.SOVIET: "4",
+    Country.USA: "5",
+    Country.FRANCE: "6",
+    Country.ITALY: "7",
+    Country.POLAND: "8",
+    Country.FINLAND: "9",
+    Country.ANZAC: "a",
+}
+_HQ_CODES: dict[Country, str] = {
+    Country.GERMANY: "3v",
+    Country.BRITAIN: "0N",
+    Country.JAPAN: "6l",
+    Country.SOVIET: "8v",
+    Country.USA: "ce",
+}
+_DECK_CODE_TABLE: dict[str, str] | None = None
+
+
+def _official_stem(value: str) -> str:
+    """把官方卡牌资产名归一化为内部卡牌 stem。"""
+    name = value.rsplit("/", 1)[-1]
+    for prefix in ("card_unit_", "card_event_", "card_location_", "card_"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    return name.lower()
+
+
+def _deck_code_table() -> dict[str, str]:
+    """加载官方卡组代码到资产名映射。"""
+    global _DECK_CODE_TABLE
+    if _DECK_CODE_TABLE is not None:
+        return _DECK_CODE_TABLE
+    table: dict[str, str] = {}
+    if DECK_CODE_FILE.is_file():
+        try:
+            raw = _string_dict(json.loads(DECK_CODE_FILE.read_text(encoding="utf-8")))
+        except (OSError, ValueError) as exc:
+            logger.warning("卡组代码表读取失败: %s", exc)
+            raw = {}
+        mapping = _string_dict(raw.get("codes"))
+        if not mapping:
+            mapping = raw
+        for code, value in mapping.items():
+            if code.startswith("_"):
+                continue
+            if isinstance(value, str):
+                table.setdefault(_official_stem(value), code)
+            elif isinstance(value, list):
+                for item in _object_list(value):
+                    if isinstance(item, str):
+                        table.setdefault(_official_stem(item), code)
+    _DECK_CODE_TABLE = table
+    return table
+
+
+def encode_deck_code(deck: Deck) -> str:
+    """把卡组编码为 KARDS 官方 ``%%`` 卡组代码。
+
+    Args:
+        deck: 要编码的卡组
+
+    Returns:
+        卡组代码, 无法编码时返回空字符串
+    """
+    table = _deck_code_table()
+    counts: dict[str, int] = {}
+    for card in deck.cards:
+        code = table.get(_official_stem(card.name))
+        if code is None and card.art:
+            code = table.get(_official_stem(card.art))
+        if code is None:
+            logger.warning("卡组代码缺少映射: %s (%s)", card.card_id, card.name)
+            return ""
+        counts[code] = counts.get(code, 0) + 1
+    groups: list[list[str]] = [[], [], [], []]
+    for code, count in counts.items():
+        if count > 4:
+            logger.warning("卡组代码单卡超过 4 张: %s x%s", code, count)
+            return ""
+        groups[count - 1].append(code)
+    cards_segment = ";".join("".join(group) for group in groups)
+    main_code = _COUNTRY_CODES.get(deck.main_country, "4")
+    ally = deck.ally_country or deck.main_country
+    ally_code = _COUNTRY_CODES.get(ally, "2")
+    hq = _HQ_CODES.get(deck.main_country, "8v")
+    code = f"%%{main_code}{ally_code}|{cards_segment}|{hq}"
+    logger.trace("卡组编码: %s -> %s", deck.name, code)
+    return code
+
+
 def make_deck(
     pool: list[str],
     owner: Player,
@@ -8021,7 +8122,6 @@ class CardBrowser:
         self.selected_deck: int = 0
         self.side_start = pygame.Rect(18, 130, 118, 92)
         self.side_cards = pygame.Rect(18, 238, 118, 92)
-        self.side_shop = pygame.Rect(18, 346, 118, 92)
         self.collection: list[Card] | None = None
         self.art_index: dict[str, Any] = {}
         index_path = assets.parent / "data" / "art_index.json"
@@ -8086,7 +8186,6 @@ class CardBrowser:
         for rect, label in (
             (self.side_start, "开始"),
             (self.side_cards, "卡牌"),
-            (self.side_shop, "商店"),
         ):
             active = label == "卡牌"
             color = (70, 78, 65) if active else (40, 45, 40)
