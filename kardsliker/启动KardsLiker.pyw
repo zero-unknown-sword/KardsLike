@@ -12,7 +12,7 @@ VENV_PYTHONW = HERE.parent / ".venv" / "Scripts" / "pythonw.exe"
 def main() -> None:
     python = VENV_PYTHONW if VENV_PYTHONW.is_file() else Path(sys.executable).with_name("pythonw.exe")
     subprocess.Popen(
-        [str(python), str(HERE / "desktop.py")],
+        [str(python), str(HERE / "app.py")],
         cwd=str(HERE),
         close_fds=True,
     )

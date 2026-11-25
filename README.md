@@ -20,12 +20,18 @@ A non-commercial fan-made card game inspired by the game KARDS.
 kardsliker/启动KardsLiker.pyw
 ```
 
-即可打开本地 KardsLiker 窗口。
+打开原生 KardsLiker 窗口，内部使用 Qt WebEngine，不显示浏览器地址栏和 CMD 窗口。
 
 需要控制台日志时使用：
 
 ```text
 kardsliker/启动KardsLiker.cmd
+```
+
+首次运行需要安装依赖：
+
+```text
+python -m pip install -r kardsliker/requirements.txt
 ```
 
 ## 版权与许可
