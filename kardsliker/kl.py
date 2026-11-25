@@ -314,6 +314,61 @@ def _collect_section(lines: list[str], start: int) -> tuple[list[str], int]:
     return collected, index
 
 
+ALLOWED_TYPES = {"infantry", "tank", "artillery", "fighter", "bomber", "order", "countermeasure"}
+ALLOWED_COUNTRIES = {
+    "germany", "britain", "japan", "soviet", "usa", "france",
+    "italy", "poland", "finland", "anzac", "neutral",
+}
+ALLOWED_RARITIES = {"standard", "limited", "special", "elite", "none"}
+INTEGER_FIELDS = {
+    "cost": (0, 99),
+    "operation_cost": (0, 9),
+    "at": (0, 99),
+    "df": (0, 99),
+}
+KNOWN_FIELDS = {
+    "name", "id", "cost", "operation_cost", "at", "df",
+    "type", "country", "rarity", "keywords", "text", "art",
+}
+
+
+def validate_card(card: dict[str, Any]) -> list[str]:
+    """检查 SET_UNIT 字段类型并返回警告。"""
+    fields = card.get("fields")
+    if not isinstance(fields, dict):
+        raise KLError("SET_UNIT 缺少字段")
+    errors: list[str] = []
+    warnings: list[str] = []
+    name = str(fields.get("name", "")).strip()
+    if not name:
+        errors.append("NAME 不能为空")
+    for key, (minimum, maximum) in INTEGER_FIELDS.items():
+        value = fields.get(key)
+        if value is None:
+            warnings.append(f"{key} 未填写，按 0 处理")
+            continue
+        if not isinstance(value, int):
+            errors.append(f"{key} 必须是整数")
+        elif not minimum <= value <= maximum:
+            errors.append(f"{key} 必须在 {minimum}..{maximum} 之间")
+    if "type" in fields and fields["type"] not in ALLOWED_TYPES:
+        errors.append(f"TYPE 无效: {fields['type']!r}")
+    if "country" in fields and fields["country"] not in ALLOWED_COUNTRIES:
+        errors.append(f"COUNTRY 无效: {fields['country']!r}")
+    if "rarity" in fields and fields["rarity"] not in ALLOWED_RARITIES:
+        errors.append(f"RARE 无效: {fields['rarity']!r}")
+    if fields.get("keywords") is not None and not isinstance(fields["keywords"], list):
+        errors.append("KEYWORDS 必须是列表")
+    if not str(fields.get("text", "")).strip():
+        warnings.append("DESCRIPTION 为空")
+    unknown = sorted(set(fields) - KNOWN_FIELDS)
+    if unknown:
+        warnings.append("未知字段: " + ", ".join(unknown))
+    if errors:
+        raise KLError("类型检查失败：" + "；".join(errors))
+    return warnings
+
+
 def parse_declarations(source: str) -> list[dict[str, Any]]:
     """解析 SET_UNIT 声明式语法。"""
     lines = source.splitlines()
@@ -415,15 +470,15 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
             continue
         index += 1
     name = str(fields.get("name", fields.get("id", "未命名卡牌")))
-    return [
-        {
-            "name": name,
-            "fields": fields,
-            "procedures": procedures,
-            "imports": imports,
-            "dependencies": dependencies,
-        }
-    ]
+    card = {
+        "name": name,
+        "fields": fields,
+        "procedures": procedures,
+        "imports": imports,
+        "dependencies": dependencies,
+    }
+    card["warnings"] = validate_card(card)
+    return [card]
 
 
 def parse(source: str) -> list[dict[str, Any]]:

@@ -354,7 +354,10 @@ class KardsLikerHandler(BaseHTTPRequestHandler):
             except KLError as exc:
                 self.send_json({"ok": False, "error": str(exc)}, 400)
                 return
-            self.send_json({"ok": True, "ast": result})
+            warnings = []
+            if result and isinstance(result[0], dict):
+                warnings = result[0].get("warnings", [])
+            self.send_json({"ok": True, "ast": result, "warnings": warnings})
             return
         self.send_json({"ok": False, "error": "未知 API"}, 404)
 

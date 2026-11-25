@@ -4,6 +4,7 @@ const filter = document.getElementById("filter");
 const klCode = document.getElementById("kl-code");
 const klHighlight = document.getElementById("kl-highlight");
 const klStatus = document.getElementById("kl-status");
+const klDiagnostics = document.getElementById("kl-diagnostics");
 const cardCode = document.getElementById("card-code");
 const fileView = document.getElementById("file-view");
 const forgeFrame = document.getElementById("forge-frame");
@@ -118,6 +119,23 @@ function updateHighlight() {
   klHighlight.scrollLeft = klCode.scrollLeft;
 }
 
+
+function setDiagnostics(error, warnings = []) {
+  klDiagnostics.className = "kl-diagnostics";
+  if (error) {
+    klDiagnostics.classList.add("error");
+    klDiagnostics.textContent = `错误：${error}`;
+    return;
+  }
+  if (warnings.length) {
+    klDiagnostics.classList.add("warn");
+    klDiagnostics.textContent = `警告：${warnings.join("；")}`;
+    return;
+  }
+  klDiagnostics.classList.add("ok");
+  klDiagnostics.textContent = "语法与类型检查通过";
+}
+
 function setKlStatus(text, kind = "") {
   klStatus.textContent = text;
   klStatus.className = `kl-status ${kind}`.trim();
@@ -136,11 +154,14 @@ function scheduleKlCheck() {
       const data = await response.json();
       if (response.ok && data.ok) {
         setKlStatus("语法通过", "ok");
+        setDiagnostics("", data.warnings || []);
       } else {
-        setKlStatus(data.error || "语法错误", "error");
+        setKlStatus("语法错误", "error");
+        setDiagnostics(data.error || "语法错误");
       }
     } catch (error) {
       setKlStatus("无法连接解析器", "error");
+      setDiagnostics("无法连接解析器");
     }
   }, 450);
 }
@@ -254,6 +275,7 @@ async function parseCard() {
   cardCode.textContent = generated.python;
   targetEl.textContent = generated.target;
   setKlStatus("语法通过", "ok");
+  setDiagnostics("", data.warnings || []);
   setStatus("KL 解析完成");
   return card;
 }
@@ -288,12 +310,16 @@ async function syncForge() {
 
 async function pullFromForge() {
   try {
-    const doc = forgeFrame.contentDocument;
+    const doc = forgeFrame.contentDocument || forgeFrame.contentWindow?.document;
     if (!doc) {
+      setDiagnostics("卡面尚未加载，请先切换到卡面并等待加载");
       setStatus("卡面尚未加载");
       return;
     }
-    const textOf = (id) => (doc.getElementById(id)?.innerText || "").trim();
+    const textOf = (id) => {
+      const element = doc.getElementById(id);
+      return (element?.innerText || element?.textContent || "").trim();
+    };
     const number = (id) => Number.parseInt(textOf(id), 10) || 0;
     const card = {
       ...(selectedCard || {
@@ -321,8 +347,8 @@ async function pullFromForge() {
       source = source.replace(pattern, `$1${value}`);
     };
     setField(/^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name));
-    setField(/^(\s*(?:CT|COST)\s*:\s*).*$/im, String(card.cost));
-    setField(/^(\s*(?:OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op));
+    setField(/^(\s*(?:CT\/COST|CT|COST)\s*:\s*).*$/im, String(card.cost));
+    setField(/^(\s*(?:OC\/OPERATION_COST|OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op));
     setField(/^(\s*AT\s*:\s*).*$/im, String(card.at));
     setField(/^(\s*DF\s*:\s*).*$/im, String(card.df));
     if (/DESCRIPTION\s*:\s*"""/i.test(source)) {
@@ -331,6 +357,9 @@ async function pullFromForge() {
       setField(/^(\s*DESCRIPTION\s*:\s*).*$/im, JSON.stringify(card.text));
     }
     klCode.value = source;
+    updateHighlight();
+    scheduleKlCheck();
+    setDiagnostics("", [`已从卡面读取：${card.name}`]);
     setStatus("已从卡面读取");
   } catch (error) {
     setStatus(`读取失败: ${error}`);
