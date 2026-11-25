@@ -40,6 +40,23 @@
 			<button id="boldBtn" class="BTBtn" onclick="BoldText()" data-html2canvas-ignore>B</button>
 			<button id="TIFSBtn" class="BTBtn TIFSBtn-unit" onclick="increaseTitleFontSize()" data-html2canvas-ignore>↑</button>
 			<button id="TDFSBtn" class="BTBtn TDFSBtn-unit" onclick="decreaseTitleFontSize()" data-html2canvas-ignore>↓</button>
+			<div id="nudgePanel" class="nudge-panel" data-html2canvas-ignore>
+				<div class="nudge-title">名称</div>
+				<div class="nudge-grid">
+					<button class="nudge-btn" onclick="nudgeElement('title', 0, -1)">↑</button>
+					<button class="nudge-btn" onclick="nudgeElement('title', -1, 0)">←</button>
+					<button class="nudge-btn" onclick="nudgeElement('title', 1, 0)">→</button>
+					<button class="nudge-btn" onclick="nudgeElement('title', 0, 1)">↓</button>
+				</div>
+				<div class="nudge-title">文本</div>
+				<div class="nudge-grid">
+					<button class="nudge-btn" onclick="nudgeElement('b-text', 0, -1)">↑</button>
+					<button class="nudge-btn" onclick="nudgeElement('b-text', -1, 0)">←</button>
+					<button class="nudge-btn" onclick="nudgeElement('b-text', 1, 0)">→</button>
+					<button class="nudge-btn" onclick="nudgeElement('b-text', 0, 1)">↓</button>
+				</div>
+				<button class="nudge-reset" onclick="resetNudge()">重置</button>
+			</div>
 		</div>
 		<button id="EditButton" class="action-btn edit-btn" onclick="onEditBClick()">隐藏编辑按钮</button>
 		<button id="SaveButton" class="action-btn save-btn" onclick="onSaveBClick()">导出卡图</button>

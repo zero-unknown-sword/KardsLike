@@ -15,6 +15,7 @@
     </nav>
     <div class="top-actions">
       <button id="sync-card">同步卡面</button>
+      <button id="pull-card">从卡面读取</button>
       <button id="parse-card">解析 KL</button>
       <button id="save-card">保存声明</button>
       <div class="status" id="status">就绪</div>
@@ -39,17 +40,21 @@
           </div>
           <div class="kl-pane">
             <div class="pane-label">KL 流程</div>
-            <textarea id="kl-code" spellcheck="false">card "测试单位" {
-    id: card_test_unit
-    type: infantry
-    country: soviet
-    rarity: standard
-    cost: 1
-    operation_cost: 1
-    at: 2
-    df: 3
-    text: "部署：抽 1 张牌。"
-}</textarea>
+            <textarea id="kl-code" spellcheck="false">IMPORT
+    kards
+DEPENDENCIES
+    kards
+SET_UNIT
+    NAME: "测试单位"
+    ID: card_test_unit
+    TYPE: infantry
+    COUNTRY: SovietUnion/SU
+    RARE: STANDARD
+    CT/COST: 1
+    OC/OPERATION_COST: 1
+    AT: 2
+    DF: 3
+    DESCRIPTION: "部署：抽 1 张牌。"</textarea>
           </div>
         </div>
       </div>

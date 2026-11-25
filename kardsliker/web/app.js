@@ -115,6 +115,10 @@ function cardFromAst(card) {
     df: Number(fields.df ?? 0),
     text: fields.text || "",
     art: fields.art || "",
+    keywords: fields.keywords || [],
+    procedures: card.procedures || "",
+    imports: card.imports || [],
+    dependencies: card.dependencies || [],
   };
 }
 
@@ -183,6 +187,58 @@ async function syncForge() {
   }
 }
 
+
+async function pullFromForge() {
+  try {
+    const doc = forgeFrame.contentDocument;
+    if (!doc) {
+      setStatus("卡面尚未加载");
+      return;
+    }
+    const textOf = (id) => (doc.getElementById(id)?.innerText || "").trim();
+    const number = (id) => Number.parseInt(textOf(id), 10) || 0;
+    const card = {
+      ...(selectedCard || {
+        id: "card_custom",
+        country: "soviet",
+        type: "infantry",
+        rarity: "standard",
+        keywords: [],
+        procedures: "",
+        imports: [],
+        dependencies: [],
+      }),
+      name: textOf("title") || "未命名卡牌",
+      cost: number("kredit"),
+      op: number("opredit"),
+      operation_cost: number("opredit"),
+      at: number("attack"),
+      df: number("defense"),
+      text: textOf("b-text"),
+    };
+    selectedCard = card;
+    updateMeta(card);
+    let source = klCode.value;
+    const setField = (pattern, value) => {
+      source = source.replace(pattern, `$1${value}`);
+    };
+    setField(/^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name));
+    setField(/^(\s*(?:CT|COST)\s*:\s*).*$/im, String(card.cost));
+    setField(/^(\s*(?:OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op));
+    setField(/^(\s*AT\s*:\s*).*$/im, String(card.at));
+    setField(/^(\s*DF\s*:\s*).*$/im, String(card.df));
+    if (/DESCRIPTION\s*:\s*"""/i.test(source)) {
+      source = source.replace(/DESCRIPTION\s*:\s*"""[\s\S]*?"""/i, `DESCRIPTION: ${JSON.stringify(card.text)}`);
+    } else {
+      setField(/^(\s*DESCRIPTION\s*:\s*).*$/im, JSON.stringify(card.text));
+    }
+    klCode.value = source;
+    setStatus("已从卡面读取");
+  } catch (error) {
+    setStatus(`读取失败: ${error}`);
+  }
+}
+
 async function saveCard(writePy) {
   try {
     const card = selectedCard || await parseCard();
@@ -203,6 +259,7 @@ document.getElementById("parse-card").addEventListener("click", () => {
   parseCard().catch((error) => setStatus(`解析失败: ${error}`));
 });
 document.getElementById("sync-card").addEventListener("click", syncForge);
+document.getElementById("pull-card").addEventListener("click", pullFromForge);
 document.getElementById("save-card").addEventListener("click", () => saveCard(false));
 document.getElementById("write-card").addEventListener("click", () => saveCard(true));
 filter.addEventListener("input", renderFiles);

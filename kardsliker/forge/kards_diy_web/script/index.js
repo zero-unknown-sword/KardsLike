@@ -208,6 +208,56 @@ function onEditBClick()
 function BoldText()
 {
 	document.execCommand('bold', false, null);
+	updateBoldState();
+}
+
+function updateBoldState()
+{
+	try
+	{
+		boldBtn.classList.toggle('bold-active', document.queryCommandState('bold'));
+	}
+	catch (error)
+	{
+		boldBtn.classList.remove('bold-active');
+	}
+}
+
+document.addEventListener('selectionchange', updateBoldState);
+
+const nudgeOffsets = {
+	title: { x: 0, y: 0 },
+	'b-text': { x: 0, y: 0 },
+};
+
+function applyNudge(id)
+{
+	const element = document.getElementById(id);
+	const offset = nudgeOffsets[id];
+	if (!element || !offset) return;
+	element.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
+}
+
+function nudgeElement(id, dx, dy)
+{
+	if (!nudgeOffsets[id]) return;
+	if (id === 'title') {
+		nudgeOffsets[id].x += dx * 2;
+		nudgeOffsets[id].y += dy * 2;
+	} else {
+		nudgeOffsets[id].x += dx * 2;
+		nudgeOffsets[id].y += dy * 2;
+	}
+	applyNudge(id);
+}
+
+function resetNudge()
+{
+	for (const id of Object.keys(nudgeOffsets)) {
+		nudgeOffsets[id].x = 0;
+		nudgeOffsets[id].y = 0;
+		applyNudge(id);
+	}
 }
 
 function onKreditInput()

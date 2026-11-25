@@ -126,6 +126,12 @@ def generate_python(data: dict[str, object]) -> str:
     text = str(data.get("text", ""))
     art = str(data.get("art", "") or "")
     art_line = f'    art="{art}",\n' if art else ""
+    procedures = str(data.get("procedures", "") or "").strip()
+    procedure_block = ""
+    if procedures:
+        procedure_block = "\n\n# KL SET_PROCEDURES\n" + "\n".join(
+            "# " + line for line in procedures.splitlines()
+        )
     return f"""# {name}
 import sys
 from pathlib import Path
@@ -147,6 +153,7 @@ CARD_DATA = CardData(
     df={int(data.get("df", 0) or 0)},
     operation_cost={int(data.get("operation_cost", 0) or 0)},
 )
+{procedure_block}
 """
 
 

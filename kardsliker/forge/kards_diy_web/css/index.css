@@ -544,3 +544,68 @@ img
 {
 	border: 2px solid green;
 }
+
+/* 加粗状态：不仅显示 B，还要有明确的选中态 */
+#boldBtn.bold-active
+{
+	background: #f0c75e;
+	color: #25251f;
+	box-shadow: 0 0 0 3px rgba(240, 199, 94, 0.45), 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* 卡牌名 / 文本位置微调面板 */
+.nudge-panel
+{
+	position: absolute;
+	left: 510px;
+	top: 90px;
+	width: 84px;
+	padding: 8px;
+	background: rgba(28, 32, 28, 0.94);
+	border: 1px solid #6f7565;
+	border-radius: 7px;
+	z-index: 50;
+}
+
+.nudge-title
+{
+	color: #cfc7a8;
+	font-size: 11px;
+	text-align: center;
+	margin: 2px 0 4px;
+}
+
+.nudge-grid
+{
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 3px;
+	margin-bottom: 7px;
+}
+
+.nudge-btn,
+.nudge-reset
+{
+	background: #41483d;
+	color: #f0ead3;
+	border: 1px solid #6f7565;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1;
+	padding: 5px 0;
+	cursor: pointer;
+}
+
+.nudge-btn:hover,
+.nudge-reset:hover
+{
+	background: #5c644f;
+	border-color: #d6bd76;
+}
+
+.nudge-reset
+{
+	width: 100%;
+	font-size: 10px;
+	padding: 4px 0;
+}
