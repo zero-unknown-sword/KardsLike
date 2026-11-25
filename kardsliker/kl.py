@@ -342,6 +342,13 @@ def validate_card(card: dict[str, Any]) -> list[str]:
     name = str(fields.get("name", "")).strip()
     if not name:
         errors.append("NAME 不能为空")
+    id_value = fields.get("id")
+    if id_value is None:
+        warnings.append("ID 未填写，保存时会自动生成")
+    elif not isinstance(id_value, str):
+        errors.append("ID 必须是字符串")
+    elif not re.fullmatch(r"[a-z][a-z0-9_]*", id_value):
+        warnings.append("ID 建议使用小写字母、数字和下划线")
     for key, (minimum, maximum) in INTEGER_FIELDS.items():
         value = fields.get(key)
         if value is None:

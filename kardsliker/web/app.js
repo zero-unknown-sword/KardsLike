@@ -4,6 +4,7 @@ const filter = document.getElementById("filter");
 const klCode = document.getElementById("kl-code");
 const klHighlight = document.getElementById("kl-highlight");
 const klStatus = document.getElementById("kl-status");
+const klSuggest = document.getElementById("kl-suggest");
 const klDiagnostics = document.getElementById("kl-diagnostics");
 const cardCode = document.getElementById("card-code");
 const fileView = document.getElementById("file-view");
@@ -98,19 +99,33 @@ function escapeHtml(text) {
 }
 
 function highlightKl(source) {
-  let html = escapeHtml(source);
-  html = html.replace(
-    /^(\s*)(IMPORT|IMPORTS|DEPEND|DEPENDS|DEPENDENCY|DEPENDENCIES|REQUIRE|REQUIRES|SET_UNIT|SET_PROCEDURES)(\s*:?\s*)$/gm,
-    '$1<span class="kl-section">$2</span>$3',
-  );
-  html = html.replace(
-    /^(\s*)([A-Za-z_][A-Za-z0-9_\/]*)(\s*:)/gm,
-    '$1<span class="kl-key">$2</span>$3',
-  );
-  html = html.replace(/(&quot;.*?&quot;)/g, '<span class="kl-string">$1</span>');
-  html = html.replace(/\b(\d+)\b/g, '<span class="kl-number">$1</span>');
-  html = html.replace(/^(\s*)(#.*)$/gm, '$1<span class="kl-comment">$2</span>');
-  return html;
+  const sectionPattern = /^(\s*)(IMPORT|IMPORTS|DEPEND|DEPENDS|DEPENDENCY|DEPENDENCIES|REQUIRE|REQUIRES|SET_UNIT|SET_PROCEDURES)(\s*:?\s*)$/;
+  const keyPattern = /^(\s*)([A-Za-z_][A-Za-z0-9_\/]*)(\s*:)(\s*)(.*)$/;
+  const enumKeys = new Set(["TYPE", "COUNTRY", "RARE", "RARITY", "FACTION"]);
+  return source.split("\n").map((line) => {
+    const section = line.match(sectionPattern);
+    if (section) {
+      return `${section[1]}<span class="kl-section">${section[2]}</span>${section[3]}`;
+    }
+    const key = line.match(keyPattern);
+    if (key) {
+      const keyName = key[2].toUpperCase();
+      const value = key[5];
+      let valueHtml = escapeHtml(value);
+      if (enumKeys.has(keyName)) {
+        valueHtml = `<span class="kl-enum">${escapeHtml(value)}</span>`;
+      } else if (/^".*"$/.test(value)) {
+        valueHtml = `<span class="kl-string">${escapeHtml(value)}</span>`;
+      } else if (/^-?\d+$/.test(value.trim())) {
+        valueHtml = `<span class="kl-number">${escapeHtml(value)}</span>`;
+      }
+      return `${key[1]}<span class="kl-key">${key[2]}</span>${key[3]}${key[4]}${valueHtml}`;
+    }
+    if (/^\s*#/.test(line)) {
+      return `<span class="kl-comment">${escapeHtml(line)}</span>`;
+    }
+    return escapeHtml(line);
+  }).join("\n");
 }
 
 function updateHighlight() {
@@ -175,6 +190,18 @@ function insertText(text) {
 }
 
 function handleKlKeydown(event) {
+  if (event.key === "Escape") {
+    hideSuggestions();
+    return;
+  }
+  if (!klSuggest.hidden && (event.key === "Tab" || event.key === "Enter")) {
+    const first = klSuggest.querySelector("button");
+    if (first) {
+      event.preventDefault();
+      applySuggestion(first.textContent || "");
+      return;
+    }
+  }
   if (event.key === "Tab") {
     event.preventDefault();
     insertText("    ");
@@ -199,9 +226,95 @@ function handleKlKeydown(event) {
 klCode.addEventListener("input", () => {
   updateHighlight();
   scheduleKlCheck();
+  updateSuggestions();
 });
+klCode.addEventListener("click", updateSuggestions);
+klCode.addEventListener("blur", () => window.setTimeout(hideSuggestions, 120));
 klCode.addEventListener("scroll", updateHighlight);
 klCode.addEventListener("keydown", handleKlKeydown);
+
+
+const SUGGEST_SECTIONS = ["IMPORT", "DEPENDENCIES", "SET_UNIT", "SET_PROCEDURES"];
+const SUGGEST_FIELDS = [
+  "NAME", "ID", "TYPE", "COUNTRY", "RARE", "CT/COST", "OC/OPERATION_COST",
+  "AT", "DF", "KEYWORDS", "DESCRIPTION",
+];
+const SUGGEST_ENUMS = {
+  TYPE: ["infantry", "tank", "artillery", "fighter", "bomber", "order", "countermeasure"],
+  COUNTRY: ["SovietUnion/SU", "Britain/UK", "Germany/GER", "Japan/JP", "USA/US", "France/FR", "Italy/IT", "Poland/PL", "Finland/FI", "Anzac", "Neutral"],
+  RARE: ["STANDARD", "LIMITED", "SPECIAL", "ELITE", "NONE"],
+};
+
+let suggestionRange = null;
+
+function hideSuggestions() {
+  klSuggest.hidden = true;
+  klSuggest.innerHTML = "";
+  suggestionRange = null;
+}
+
+function applySuggestion(value) {
+  if (!suggestionRange) return;
+  const [start, end] = suggestionRange;
+  klCode.setRangeText(value, start, end, "end");
+  klCode.focus();
+  hideSuggestions();
+  updateHighlight();
+  scheduleKlCheck();
+}
+
+function showSuggestions(items, start) {
+  if (!items.length) {
+    hideSuggestions();
+    return;
+  }
+  suggestionRange = [start, klCode.selectionStart];
+  klSuggest.innerHTML = "";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = item;
+    button.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      applySuggestion(item);
+    });
+    klSuggest.appendChild(button);
+  }
+  klSuggest.hidden = false;
+}
+
+function updateSuggestions() {
+  const position = klCode.selectionStart;
+  const before = klCode.value.slice(0, position);
+  const lineStart = before.lastIndexOf("\n") + 1;
+  const line = before.slice(lineStart);
+  const indent = line.match(/^\s*/)?.[0] || "";
+  const rest = line.slice(indent.length);
+  const enumMatch = rest.match(/^(TYPE|COUNTRY|RARE)\s*:\s*(.*)$/i);
+  if (enumMatch) {
+    const key = enumMatch[1].toUpperCase();
+    const needle = enumMatch[2].trim().toLowerCase();
+    const items = (SUGGEST_ENUMS[key] || []).filter((item) => item.toLowerCase().startsWith(needle));
+    const colonIndex = rest.indexOf(":");
+    let valueStart = lineStart + indent.length + colonIndex + 1;
+    while (klCode.value[valueStart] === " ") valueStart += 1;
+    showSuggestions(items, valueStart);
+    return;
+  }
+  const keyMatch = rest.match(/^([A-Za-z_\/]+)$/);
+  if (keyMatch) {
+    const needle = keyMatch[1].toLowerCase();
+    const items = SUGGEST_FIELDS.filter((item) => item.toLowerCase().startsWith(needle));
+    showSuggestions(items, lineStart + indent.length);
+    return;
+  }
+  if (!rest.trim()) {
+    const items = indent.length === 0 ? SUGGEST_SECTIONS : SUGGEST_FIELDS;
+    showSuggestions(items, lineStart + indent.length);
+    return;
+  }
+  hideSuggestions();
+}
 
 const TYPE_INDEX = {
   infantry: 1, tank: 2, artillery: 3, fighter: 4, bomber: 5, order: 6, countermeasure: 7,
@@ -214,7 +327,7 @@ const RARITY_INDEX = { standard: 1, limited: 2, special: 3, elite: 4, none: 5 };
 
 function cardFromAst(card) {
   const fields = card.fields || {};
-  const rawId = String(fields.id || "").trim();
+  const rawId = typeof fields.id === "string" ? fields.id.trim() : "";
   const fallback = String(card.name || "custom")
     .toLowerCase()
     .replace(/\s+/g, "_")
@@ -308,6 +421,34 @@ async function syncForge() {
 }
 
 
+const PULL_TYPE_MAP = {
+  "步兵": "infantry", "坦克": "tank", "炮兵": "artillery", "火炮": "artillery",
+  "战斗机": "fighter", "轰炸机": "bomber", "指令": "order", "反制": "countermeasure",
+};
+const PULL_RARITY_MAP = {
+  "普通": "standard", "限定": "limited", "特殊": "special", "精英": "elite", "衍生": "none",
+};
+
+function fileStem(element) {
+  const source = element?.getAttribute("src") || "";
+  const name = source.split("/").pop() || "";
+  try {
+    return decodeURIComponent(name).replace(/\.[^.]+$/, "");
+  } catch (error) {
+    return name.replace(/\.[^.]+$/, "");
+  }
+}
+
+function setKlValue(source, pattern, value, keyLine) {
+  if (pattern.test(source)) {
+    return source.replace(pattern, `$1${value}`);
+  }
+  const anchor = /^(\s*)SET_UNIT\s*$/im.exec(source);
+  if (!anchor) return source;
+  const insertAt = anchor.index + anchor[0].length;
+  return `${source.slice(0, insertAt)}\n${anchor[1]}    ${keyLine}${source.slice(insertAt)}`;
+}
+
 async function pullFromForge() {
   try {
     const doc = forgeFrame.contentDocument || forgeFrame.contentWindow?.document;
@@ -321,13 +462,13 @@ async function pullFromForge() {
       return (element?.innerText || element?.textContent || "").trim();
     };
     const number = (id) => Number.parseInt(textOf(id), 10) || 0;
+    const typeName = PULL_TYPE_MAP[fileStem(doc.getElementById("type"))] || selectedCard?.type || "infantry";
+    const countryName = fileStem(doc.getElementById("faction")).toLowerCase() || selectedCard?.country || "soviet";
+    const rarityName = PULL_RARITY_MAP[fileStem(doc.getElementById("rarity"))] || selectedCard?.rarity || "standard";
+    const keywords = selectedCard?.keywords || [];
     const card = {
       ...(selectedCard || {
         id: "card_custom",
-        country: "soviet",
-        type: "infantry",
-        rarity: "standard",
-        keywords: [],
         procedures: "",
         imports: [],
         dependencies: [],
@@ -338,30 +479,38 @@ async function pullFromForge() {
       operation_cost: number("opredit"),
       at: number("attack"),
       df: number("defense"),
+      type: typeName,
+      country: countryName,
+      rarity: rarityName,
       text: textOf("b-text"),
+      keywords,
     };
     selectedCard = card;
     updateMeta(card);
     let source = klCode.value;
-    const setField = (pattern, value) => {
-      source = source.replace(pattern, `$1${value}`);
-    };
-    setField(/^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name));
-    setField(/^(\s*(?:CT\/COST|CT|COST)\s*:\s*).*$/im, String(card.cost));
-    setField(/^(\s*(?:OC\/OPERATION_COST|OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op));
-    setField(/^(\s*AT\s*:\s*).*$/im, String(card.at));
-    setField(/^(\s*DF\s*:\s*).*$/im, String(card.df));
+    source = setKlValue(source, /^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name), `NAME: ${JSON.stringify(card.name)}`);
+    source = setKlValue(source, /^(\s*ID\s*:\s*).*$/im, card.id, `ID: ${card.id}`);
+    source = setKlValue(source, /^(\s*TYPE\s*:\s*).*$/im, card.type, `TYPE: ${card.type}`);
+    source = setKlValue(source, /^(\s*COUNTRY\s*:\s*).*$/im, card.country, `COUNTRY: ${card.country}`);
+    source = setKlValue(source, /^(\s*RARE\s*:\s*).*$/im, card.rarity, `RARE: ${card.rarity}`);
+    source = setKlValue(source, /^(\s*(?:CT\/COST|CT|COST)\s*:\s*).*$/im, String(card.cost), `CT/COST: ${card.cost}`);
+    source = setKlValue(source, /^(\s*(?:OC\/OPERATION_COST|OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op), `OC/OPERATION_COST: ${card.op}`);
+    source = setKlValue(source, /^(\s*AT\s*:\s*).*$/im, String(card.at), `AT: ${card.at}`);
+    source = setKlValue(source, /^(\s*DF\s*:\s*).*$/im, String(card.df), `DF: ${card.df}`);
+    const keywordLine = `[${keywords.join(", ")}]`;
+    source = setKlValue(source, /^(\s*KEYWORDS\s*:\s*).*$/im, keywordLine, `KEYWORDS: ${keywordLine}`);
     if (/DESCRIPTION\s*:\s*"""/i.test(source)) {
       source = source.replace(/DESCRIPTION\s*:\s*"""[\s\S]*?"""/i, `DESCRIPTION: ${JSON.stringify(card.text)}`);
     } else {
-      setField(/^(\s*DESCRIPTION\s*:\s*).*$/im, JSON.stringify(card.text));
+      source = setKlValue(source, /^(\s*DESCRIPTION\s*:\s*).*$/im, JSON.stringify(card.text), `DESCRIPTION: ${JSON.stringify(card.text)}`);
     }
     klCode.value = source;
     updateHighlight();
     scheduleKlCheck();
-    setDiagnostics("", [`已从卡面读取：${card.name}`]);
+    setDiagnostics("", [`已从卡面读取全部字段：${card.name}`]);
     setStatus("已从卡面读取");
   } catch (error) {
+    setDiagnostics(`读取卡面失败：${error}`);
     setStatus(`读取失败: ${error}`);
   }
 }

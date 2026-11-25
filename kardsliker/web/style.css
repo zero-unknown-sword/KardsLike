@@ -104,6 +104,7 @@ main { flex: 1; min-height: 0; display: flex; }
 .kl-highlight .kl-key { color: #9bc7e8; }
 .kl-highlight .kl-string { color: #b8d49a; }
 .kl-highlight .kl-number { color: #e39a78; }
+.kl-highlight .kl-enum { color: #d6a6e8; font-weight: 600; }
 .kl-highlight .kl-comment { color: #6f7868; font-style: italic; }
 .kl-status { float: right; color: #9a9988; font-size: 11px; font-weight: normal; }
 .kl-status.ok { color: #8fbd72; }
@@ -200,3 +201,37 @@ main { flex: 1; min-height: 0; display: flex; }
 .kl-diagnostics.ok { color: #8fbd72; }
 .kl-diagnostics.warn { color: #d6b76a; }
 .kl-diagnostics.error { color: #e08a7a; }
+
+
+.kl-suggest {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  z-index: 4;
+  min-width: 180px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  background: #202820;
+  border: 1px solid #c7ad68;
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.kl-suggest button {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #d9d4bd;
+  text-align: left;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+.kl-suggest button:hover,
+.kl-suggest button.active {
+  background: #4f5c45;
+  color: #fff2c8;
+}
