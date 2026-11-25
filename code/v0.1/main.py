@@ -4789,7 +4789,7 @@ def load_mods() -> None:
 
 # 默认卡组池, 循环填满 39 张
 # 测试配置: 只保留 AT>=4 的单位, 提高抽牌与空军数量
-DEFAULT_DECK_NAME: str = "苏英弹药"
+DEFAULT_DECK_NAME: str = "测试卡组"
 """默认卡组名称"""
 DEFAULT_DECK_POOL: list[str] = [
     # 开发
@@ -4839,7 +4839,7 @@ DEFAULT_DECK_POOL: list[str] = [
 
 
 DECKS: dict[str, list[str]] = {DEFAULT_DECK_NAME: DEFAULT_DECK_POOL}
-"""已命名的卡组, 默认卡组为苏英弹药"""
+"""已命名的卡组, 默认卡组为测试卡组"""
 DEFAULT_DECK: str = DEFAULT_DECK_NAME
 """当前默认卡组名"""
 DECK_DIR: Path = Path(__file__).resolve().parent / "mods" / "kards" / "data" / "decks"
