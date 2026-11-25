@@ -61,8 +61,8 @@ main { flex: 1; min-height: 0; display: flex; }
 
 .workspace-panel { display: none; flex: 1; min-height: 0; }
 .workspace-panel.active { display: block; }
-.workspace-split { height: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-.face-pane, .kl-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.workspace-split { height: 100%; min-height: 0; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; }
+.face-pane, .kl-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .face-pane { border-right: 1px solid var(--line); }
 .pane-label { padding: 10px 14px; color: var(--accent); font-size: 12px; border-bottom: 1px solid var(--line); background: #1b211c; flex: none; }
 .face-pane iframe { width: 100%; flex: 1; border: 0; background: #fff; }
@@ -189,6 +189,7 @@ main { flex: 1; min-height: 0; display: flex; }
 }
 .kl-diagnostics {
   flex: none;
+  flex-shrink: 0;
   min-height: 28px;
   padding: 6px 12px;
   color: #9a9988;

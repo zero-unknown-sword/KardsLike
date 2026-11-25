@@ -240,8 +240,8 @@ const SUGGEST_FIELDS = [
   "AT", "DF", "KEYWORDS", "DESCRIPTION",
 ];
 const SUGGEST_ENUMS = {
-  TYPE: ["infantry", "tank", "artillery", "fighter", "bomber", "order", "countermeasure"],
-  COUNTRY: ["SovietUnion/SU", "Britain/UK", "Germany/GER", "Japan/JP", "USA/US", "France/FR", "Italy/IT", "Poland/PL", "Finland/FI", "Anzac", "Neutral"],
+  TYPE: ["INF", "TANK", "ART", "FTR", "BMB", "ORD", "CTR"],
+  COUNTRY: ["SU", "GE", "BR", "JP", "US", "FR", "IT", "PL", "FI", "AN", "NE"],
   RARE: ["STANDARD", "LIMITED", "SPECIAL", "ELITE", "NONE"],
 };
 
@@ -324,6 +324,37 @@ const FACTION_INDEX = {
   italy: 7, poland: 8, finland: 9, anzac: 10, neutral: 11,
 };
 const RARITY_INDEX = { standard: 1, limited: 2, special: 3, elite: 4, none: 5 };
+const COUNTRY_SHORT = {
+  soviet: "SU", germany: "GE", britain: "BR", japan: "JP", usa: "US",
+  france: "FR", italy: "IT", poland: "PL", finland: "FI", anzac: "AN", neutral: "NE",
+};
+const TYPE_SHORT = {
+  infantry: "INF", tank: "TANK", artillery: "ART", fighter: "FTR",
+  bomber: "BMB", order: "ORD", countermeasure: "CTR",
+};
+const COUNTRY_ALIASES = {
+  su: "soviet", soviet: "soviet", sovietunion: "soviet",
+  ge: "germany", de: "germany", germany: "germany",
+  br: "britain", uk: "britain", britain: "britain",
+  jp: "japan", japan: "japan", us: "usa", usa: "usa",
+  fr: "france", france: "france", it: "italy", italy: "italy",
+  pl: "poland", poland: "poland", fi: "finland", finland: "finland",
+  an: "anzac", anzac: "anzac", ne: "neutral", neutral: "neutral",
+};
+const TYPE_ALIASES = {
+  inf: "infantry", infantry: "infantry", tank: "tank",
+  art: "artillery", artillery: "artillery", ftr: "fighter", fighter: "fighter",
+  bmb: "bomber", bomber: "bomber", ord: "order", order: "order",
+  ctr: "countermeasure", countermeasure: "countermeasure",
+};
+
+function normalizeCountry(value) {
+  return COUNTRY_ALIASES[String(value || "").trim().toLowerCase()] || "soviet";
+}
+
+function normalizeType(value) {
+  return TYPE_ALIASES[String(value || "").trim().toLowerCase()] || "infantry";
+}
 
 function cardFromAst(card) {
   const fields = card.fields || {};
@@ -336,8 +367,8 @@ function cardFromAst(card) {
   return {
     id,
     name: card.name || "未命名卡牌",
-    country: fields.country || "soviet",
-    type: fields.type || "infantry",
+    country: normalizeCountry(fields.country || "soviet"),
+    type: normalizeType(fields.type || "infantry"),
     rarity: fields.rarity || "standard",
     cost: Number(fields.cost ?? 0),
     op: Number(fields.operation_cost ?? fields.op ?? 0),
@@ -465,7 +496,12 @@ async function pullFromForge() {
     const typeName = PULL_TYPE_MAP[fileStem(doc.getElementById("type"))] || selectedCard?.type || "infantry";
     const countryName = fileStem(doc.getElementById("faction")).toLowerCase() || selectedCard?.country || "soviet";
     const rarityName = PULL_RARITY_MAP[fileStem(doc.getElementById("rarity"))] || selectedCard?.rarity || "standard";
-    const keywords = selectedCard?.keywords || [];
+    const currentSource = klCode.value;
+    const idMatch = currentSource.match(/^\s*ID\s*:\s*([^\s,]+)/im);
+    const keywordMatch = currentSource.match(/^\s*KEYWORDS\s*:\s*\[([^\]]*)\]/im);
+    const keywords = keywordMatch
+      ? keywordMatch[1].split(",").map((item) => item.trim()).filter(Boolean)
+      : (selectedCard?.keywords || []);
     const card = {
       ...(selectedCard || {
         id: "card_custom",
@@ -473,6 +509,7 @@ async function pullFromForge() {
         imports: [],
         dependencies: [],
       }),
+      id: idMatch?.[1] || selectedCard?.id || "card_custom",
       name: textOf("title") || "未命名卡牌",
       cost: number("kredit"),
       op: number("opredit"),
@@ -490,8 +527,8 @@ async function pullFromForge() {
     let source = klCode.value;
     source = setKlValue(source, /^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name), `NAME: ${JSON.stringify(card.name)}`);
     source = setKlValue(source, /^(\s*ID\s*:\s*).*$/im, card.id, `ID: ${card.id}`);
-    source = setKlValue(source, /^(\s*TYPE\s*:\s*).*$/im, card.type, `TYPE: ${card.type}`);
-    source = setKlValue(source, /^(\s*COUNTRY\s*:\s*).*$/im, card.country, `COUNTRY: ${card.country}`);
+    source = setKlValue(source, /^(\s*TYPE\s*:\s*).*$/im, TYPE_SHORT[card.type] || card.type, `TYPE: ${TYPE_SHORT[card.type] || card.type}`);
+    source = setKlValue(source, /^(\s*COUNTRY\s*:\s*).*$/im, COUNTRY_SHORT[card.country] || card.country, `COUNTRY: ${COUNTRY_SHORT[card.country] || card.country}`);
     source = setKlValue(source, /^(\s*RARE\s*:\s*).*$/im, card.rarity, `RARE: ${card.rarity}`);
     source = setKlValue(source, /^(\s*(?:CT\/COST|CT|COST)\s*:\s*).*$/im, String(card.cost), `CT/COST: ${card.cost}`);
     source = setKlValue(source, /^(\s*(?:OC\/OPERATION_COST|OC|OPERATION_COST|OP)\s*:\s*).*$/im, String(card.op), `OC/OPERATION_COST: ${card.op}`);
@@ -544,6 +581,7 @@ document.getElementById("write-card").addEventListener("click", () => saveCard(t
 filter.addEventListener("input", renderFiles);
 
 updateHighlight();
+scheduleKlCheck();
 loadFiles()
   .then(() => setStatus("就绪"))
   .catch((error) => setStatus(String(error)));
