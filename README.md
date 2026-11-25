@@ -7,7 +7,9 @@ A non-commercial fan-made card game inspired by the game KARDS.
 
 ## 目录结构
 
-- `code/`：存放源代码
+- `kardslike/`：游戏源代码
+- `kardsliker/`：KardsLiker mod 编辑器
+  - `kardsliker/forge/`：KARDS DIY 卡面制作器
 - `releases`：可运行版本通过 GitHub Releases 发布，不纳入 Git 仓库
 
 ## 版权与许可

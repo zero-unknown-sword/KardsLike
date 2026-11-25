@@ -1,5 +1,5 @@
 ﻿# 开发文档（个人笔记，不纳入版本控制）
-code/v0.1/DEV-NOTES.md
+kardslike/DEV-NOTES.md
 
 # Python 虚拟环境
 .venv/
@@ -18,20 +18,20 @@ sandbox-acl-reports/
 *.pyc
 
 # 运行日志、崩溃报告、截图
-code/v0.1/logs/
-code/v0.1/crashes/
-code/v0.1/screenshots/
-code/v0.1/saves/
+kardslike/logs/
+kardslike/crashes/
+kardslike/screenshots/
+kardslike/saves/
 .cache/
-code/v0.1/.cache/
+kardslike/.cache/
 
 # 完整卡图资源，使用 download_assets.py 获取
-code/v0.1/mods/kards/assets/
+kardslike/mods/kards/assets/
 
 # 构建产物通过 GitHub Releases 发布
 game/
 games/
 
-code/v0.1/forge_tools/card_forge_source/
-code/v0.1/forge_tools/card_forge_exports/
+kardsliker/forge/card_forge_source/
+kardsliker/forge/card_forge_exports/
 dev-tools/
