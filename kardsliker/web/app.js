@@ -5,6 +5,8 @@ const klCode = document.getElementById("kl-code");
 const klHighlight = document.getElementById("kl-highlight");
 const klStatus = document.getElementById("kl-status");
 const klSuggest = document.getElementById("kl-suggest");
+const klUndo = document.getElementById("kl-undo");
+const klRedo = document.getElementById("kl-redo");
 const klDiagnostics = document.getElementById("kl-diagnostics");
 const cardCode = document.getElementById("card-code");
 const fileView = document.getElementById("file-view");
@@ -196,15 +198,81 @@ function scheduleKlCheck() {
   }, 450);
 }
 
+
+let klHistory = [];
+let historyIndex = -1;
+let applyingHistory = false;
+
+function snapshot() {
+  return {
+    value: klCode.value,
+    start: klCode.selectionStart,
+    end: klCode.selectionEnd,
+  };
+}
+
+function updateHistoryButtons() {
+  klUndo.disabled = historyIndex <= 0;
+  klRedo.disabled = historyIndex >= klHistory.length - 1;
+}
+
+function pushHistory() {
+  if (applyingHistory) return;
+  const current = snapshot();
+  if (klHistory[historyIndex]?.value === current.value) {
+    klHistory[historyIndex] = current;
+    updateHistoryButtons();
+    return;
+  }
+  klHistory = klHistory.slice(0, historyIndex + 1);
+  klHistory.push(current);
+  if (klHistory.length > 120) klHistory.shift();
+  historyIndex = klHistory.length - 1;
+  updateHistoryButtons();
+}
+
+function applyHistory(index) {
+  if (index < 0 || index >= klHistory.length) return;
+  applyingHistory = true;
+  const entry = klHistory[index];
+  historyIndex = index;
+  klCode.value = entry.value;
+  klCode.setSelectionRange(entry.start, entry.end);
+  updateHighlight();
+  updateSuggestions();
+  scheduleKlCheck();
+  applyingHistory = false;
+  updateHistoryButtons();
+}
+
+function undo() {
+  if (historyIndex > 0) applyHistory(historyIndex - 1);
+}
+
+function redo() {
+  if (historyIndex < klHistory.length - 1) applyHistory(historyIndex + 1);
+}
+
 function insertText(text) {
   const start = klCode.selectionStart;
   const end = klCode.selectionEnd;
   klCode.setRangeText(text, start, end, "end");
   updateHighlight();
   scheduleKlCheck();
+  pushHistory();
 }
 
 function handleKlKeydown(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    if (event.shiftKey) redo(); else undo();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+    event.preventDefault();
+    redo();
+    return;
+  }
   if (event.key === "Escape") {
     hideSuggestions();
     return;
@@ -242,11 +310,14 @@ klCode.addEventListener("input", () => {
   updateHighlight();
   scheduleKlCheck();
   updateSuggestions();
+  pushHistory();
 });
 klCode.addEventListener("click", updateSuggestions);
 klCode.addEventListener("blur", () => window.setTimeout(hideSuggestions, 120));
 klCode.addEventListener("scroll", updateHighlight);
 klCode.addEventListener("keydown", handleKlKeydown);
+klUndo.addEventListener("click", undo);
+klRedo.addEventListener("click", redo);
 
 
 const SUGGEST_SECTIONS = ["IMPORT", "DEPENDENCIES", "SET_UNIT", "SET_PROCEDURES"];
@@ -270,12 +341,15 @@ function hideSuggestions() {
 
 function applySuggestion(value) {
   if (!suggestionRange) return;
-  const [start, end] = suggestionRange;
+  const [rawStart, rawEnd] = suggestionRange;
+  const start = Math.max(0, Math.min(rawStart, klCode.value.length));
+  const end = Math.max(start, Math.min(rawEnd, klCode.value.length));
   klCode.setRangeText(value, start, end, "end");
   klCode.focus();
   hideSuggestions();
   updateHighlight();
   scheduleKlCheck();
+  pushHistory();
 }
 
 function showSuggestions(items, start) {
@@ -283,7 +357,8 @@ function showSuggestions(items, start) {
     hideSuggestions();
     return;
   }
-  suggestionRange = [start, klCode.selectionStart];
+  const position = klCode.selectionStart;
+  suggestionRange = [Math.max(0, Math.min(start, position)), position];
   klSuggest.innerHTML = "";
   for (const item of items) {
     const button = document.createElement("button");
@@ -620,6 +695,7 @@ async function pullFromForge() {
     klCode.value = source;
     updateHighlight();
     scheduleKlCheck();
+    pushHistory();
     setDiagnostics("", [`已从卡面读取全部字段：${card.name}`]);
     setStatus("已从卡面读取");
   } catch (error) {
@@ -657,6 +733,8 @@ document.getElementById("write-card").addEventListener("click", () => saveCard(t
 filter.addEventListener("input", renderFiles);
 
 updateHighlight();
+pushHistory();
+updateHistoryButtons();
 scheduleKlCheck();
 loadKeywords();
 loadFiles()

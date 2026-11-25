@@ -39,7 +39,12 @@
             <iframe id="forge-frame" title="KARDS DIY" src="/forge/"></iframe>
           </div>
           <div class="kl-pane">
-            <div class="pane-label">KL 流程 <span id="kl-status" class="kl-status">就绪</span></div>
+            <div class="pane-label kl-pane-label">
+              KL 流程
+              <span id="kl-status" class="kl-status">就绪</span>
+              <button id="kl-undo" class="kl-history" type="button">撤销</button>
+              <button id="kl-redo" class="kl-history" type="button">重做</button>
+            </div>
             <div class="kl-editor-wrap">
               <pre id="kl-highlight" class="kl-highlight" aria-hidden="true"></pre>
               <div id="kl-suggest" class="kl-suggest" hidden></div>

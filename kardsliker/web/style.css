@@ -244,3 +244,18 @@ main { flex: 1; min-height: 0; display: flex; }
   background: #4f5c45;
   color: #fff2c8;
 }
+
+
+.kl-pane-label { display: flex; align-items: center; gap: 8px; }
+.kl-pane-label .kl-status { margin-left: auto; float: none; }
+.kl-history {
+  background: #303a30;
+  color: #d9d4bd;
+  border: 1px solid #465044;
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.kl-history:hover { background: #414b3e; border-color: #c7ad68; }
+.kl-history:disabled { opacity: 0.35; cursor: default; }
