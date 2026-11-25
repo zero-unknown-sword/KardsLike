@@ -17,7 +17,7 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from kl import KLError, parse as parse_kl
 
@@ -230,8 +230,12 @@ class KardsLikerHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "path": relative, "content": path.read_text(encoding="utf-8")})
             return
         if parsed.path.startswith("/forge/"):
-            relative = parsed.path[len("/forge/") :] or "index.html"
-            self.serve_file((FORGE_ROOT / relative).resolve())
+            relative = unquote(parsed.path[len("/forge/") :]) or "index.html"
+            candidate = (FORGE_ROOT / relative).resolve()
+            if FORGE_ROOT.resolve() not in candidate.parents and candidate != FORGE_ROOT.resolve():
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+            self.serve_file(candidate)
             return
         relative = parsed.path.lstrip("/") or "index.html"
         candidate = (WEB_ROOT / relative).resolve()

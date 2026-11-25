@@ -1,18 +1,16 @@
 const statusEl = document.getElementById("status");
 const fileList = document.getElementById("files");
 const filter = document.getElementById("filter");
-const code = document.getElementById("code");
-const currentFile = document.getElementById("current-file");
-const runOutput = document.getElementById("run-output");
-const output = document.getElementById("output");
 const klCode = document.getElementById("kl-code");
-const klOutput = document.getElementById("kl-output");
 const cardCode = document.getElementById("card-code");
+const fileView = document.getElementById("file-view");
 const forgeFrame = document.getElementById("forge-frame");
+const targetEl = document.getElementById("declaration-target");
+const metaEl = document.getElementById("declaration-meta");
 
 let files = [];
-let selected = "";
-let currentTab = "card";
+let selectedFile = "";
+let selectedCard = null;
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -30,21 +28,15 @@ async function api(path, options = {}) {
   return data;
 }
 
-function switchTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll(".tabs button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.tab === tab);
+document.querySelectorAll(".workspace-tabs button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".workspace-tabs button").forEach((item) => {
+      item.classList.toggle("active", item === button);
+    });
+    document.querySelectorAll(".workspace-panel").forEach((panel) => {
+      panel.classList.toggle("active", panel.id === `workspace-${button.dataset.workspace}`);
+    });
   });
-  document.querySelectorAll(".panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `panel-${tab}`);
-  });
-  if (tab === "forge") {
-    window.setTimeout(syncForge, 250);
-  }
-}
-
-document.querySelectorAll(".tabs button").forEach((button) => {
-  button.addEventListener("click", () => switchTab(button.dataset.tab));
 });
 
 function renderFiles() {
@@ -55,7 +47,7 @@ function renderFiles() {
     const button = document.createElement("button");
     button.textContent = path;
     button.title = path;
-    button.classList.toggle("active", path === selected);
+    button.classList.toggle("active", path === selectedFile);
     button.addEventListener("click", () => openFile(path));
     fileList.appendChild(button);
   }
@@ -68,63 +60,17 @@ async function loadFiles() {
 }
 
 async function openFile(path) {
-  selected = path;
+  selectedFile = path;
   renderFiles();
-  currentFile.textContent = path;
-  const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
-  code.value = data.content;
-  switchTab("python");
-  setStatus(`已打开 ${path}`);
+  try {
+    const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
+    fileView.textContent = data.content;
+    setStatus(`已打开资源 ${path}`);
+  } catch (error) {
+    fileView.textContent = String(error);
+    setStatus("资源读取失败");
+  }
 }
-
-document.getElementById("save").addEventListener("click", async () => {
-  if (!selected) return;
-  try {
-    await api("/api/file", {
-      method: "POST",
-      body: JSON.stringify({ path: selected, content: code.value }),
-    });
-    setStatus(`已保存 ${selected}`);
-  } catch (error) {
-    setStatus(String(error));
-  }
-});
-
-document.getElementById("run").addEventListener("click", async () => {
-  if (!selected) {
-    runOutput.textContent = "请先选择一个 .py 文件";
-    return;
-  }
-  try {
-    setStatus("运行中...");
-    const data = await api("/api/run", {
-      method: "POST",
-      body: JSON.stringify({ path: selected }),
-    });
-    runOutput.textContent =
-      `returncode: ${data.returncode}\n\n[stdout]\n${data.stdout}\n[stderr]\n${data.stderr}`;
-    setStatus(data.returncode === 0 ? "运行完成" : "运行失败");
-  } catch (error) {
-    runOutput.textContent = String(error);
-    setStatus("运行失败");
-  }
-});
-
-document.getElementById("parse-kl").addEventListener("click", async () => {
-  try {
-    const data = await api("/api/kl", {
-      method: "POST",
-      body: JSON.stringify({ source: klCode.value }),
-    });
-    klOutput.textContent = JSON.stringify(data.ast, null, 2);
-    setStatus("KL 解析成功");
-  } catch (error) {
-    klOutput.textContent = String(error);
-    setStatus("KL 解析失败");
-  }
-});
-
-filter.addEventListener("input", renderFiles);
 
 const TYPE_INDEX = {
   infantry: 1, tank: 2, artillery: 3, fighter: 4, bomber: 5, order: 6, countermeasure: 7,
@@ -135,31 +81,76 @@ const FACTION_INDEX = {
 };
 const RARITY_INDEX = { standard: 1, limited: 2, special: 3, elite: 4, none: 5 };
 
-function readCard() {
+function cardFromAst(card) {
+  const fields = card.fields || {};
+  const rawId = String(fields.id || "").trim();
+  const fallback = String(card.name || "custom")
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+  const id = rawId || `card_${fallback || "custom"}`;
   return {
-    id: document.getElementById("card-id").value.trim() || "card_new_unit",
-    name: document.getElementById("card-name").value.trim() || "未命名卡牌",
-    country: document.getElementById("card-country").value,
-    type: document.getElementById("card-type").value,
-    rarity: document.getElementById("card-rarity").value,
-    cost: Number(document.getElementById("card-cost").value || 0),
-    op: Number(document.getElementById("card-op").value || 0),
-    operation_cost: Number(document.getElementById("card-op").value || 0),
-    at: Number(document.getElementById("card-at").value || 0),
-    df: Number(document.getElementById("card-df").value || 0),
-    text: document.getElementById("card-text").value,
-    art: document.getElementById("card-art").value.trim(),
+    id,
+    name: card.name || "未命名卡牌",
+    country: fields.country || "soviet",
+    type: fields.type || "infantry",
+    rarity: fields.rarity || "standard",
+    cost: Number(fields.cost ?? 0),
+    op: Number(fields.operation_cost ?? fields.op ?? 0),
+    operation_cost: Number(fields.operation_cost ?? fields.op ?? 0),
+    at: Number(fields.at ?? 0),
+    df: Number(fields.df ?? 0),
+    text: fields.text || "",
+    art: fields.art || "",
   };
 }
 
-async function syncForge() {
-  const win = forgeFrame.contentWindow;
-  if (!win || !win.KardsDIY) {
-    setStatus("卡面尚未加载");
-    return;
+function updateMeta(card) {
+  metaEl.innerHTML = "";
+  for (const [label, value] of [
+    ["名称", card.name],
+    ["ID", card.id],
+    ["国家 / 类型", `${card.country} / ${card.type}`],
+  ]) {
+    const row = document.createElement("div");
+    const key = document.createElement("b");
+    key.textContent = label;
+    const text = document.createElement("span");
+    text.textContent = value;
+    row.append(key, text);
+    metaEl.append(row);
   }
-  const card = readCard();
+}
+
+async function parseCard() {
+  const data = await api("/api/kl", {
+    method: "POST",
+    body: JSON.stringify({ source: klCode.value }),
+  });
+  if (!data.ast || data.ast.length === 0) {
+    throw new Error("KL 中没有 card 声明");
+  }
+  const card = cardFromAst(data.ast[0]);
+  selectedCard = card;
+  updateMeta(card);
+  const generated = await api("/api/card/generate", {
+    method: "POST",
+    body: JSON.stringify(card),
+  });
+  cardCode.textContent = generated.python;
+  targetEl.textContent = generated.target;
+  setStatus("KL 解析完成");
+  return card;
+}
+
+async function syncForge() {
   try {
+    const card = selectedCard || await parseCard();
+    const win = forgeFrame.contentWindow;
+    if (!win || !win.KardsDIY) {
+      setStatus("卡面尚未加载");
+      return;
+    }
     await win.KardsDIY.setCard({
       typeIndex: TYPE_INDEX[card.type] || 1,
       factionIndex: FACTION_INDEX[card.country] || 4,
@@ -170,7 +161,7 @@ async function syncForge() {
       operationCost: card.op,
       attack: card.at,
       defense: card.df,
-      bodyHtml: card.text.replace(/\n/g, "<br>"),
+      bodyHtml: String(card.text).replace(/\n/g, "<br>"),
       art: card.art || undefined,
     });
     setStatus("已同步到卡面");
@@ -179,43 +170,30 @@ async function syncForge() {
   }
 }
 
-async function generateCode() {
-  try {
-    const data = await api("/api/card/generate", {
-      method: "POST",
-      body: JSON.stringify(readCard()),
-    });
-    cardCode.textContent = `# KL\n${data.kl}\n\n# Python\n${data.python}\n\n# target\n${data.target}`;
-    setStatus("代码生成完成");
-  } catch (error) {
-    cardCode.textContent = String(error);
-    setStatus("生成失败");
-  }
-}
-
 async function saveCard(writePy) {
   try {
+    const card = selectedCard || await parseCard();
     const data = await api("/api/card/save", {
       method: "POST",
-      body: JSON.stringify({ ...readCard(), write_py: writePy }),
+      body: JSON.stringify({ ...card, write_py: writePy }),
     });
     cardCode.textContent =
       `project: ${data.project}\npython: ${data.python}\nwritten: ${data.written}`;
-    setStatus(writePy ? "已写入 mod" : "卡牌已保存");
+    targetEl.textContent = data.python;
+    setStatus(writePy ? "已写入 mod" : "声明已保存");
   } catch (error) {
-    cardCode.textContent = String(error);
-    setStatus("保存失败");
+    setStatus(`保存失败: ${error}`);
   }
 }
 
-document.getElementById("sync-forge").addEventListener("click", syncForge);
-document.getElementById("generate-code").addEventListener("click", generateCode);
+document.getElementById("parse-card").addEventListener("click", () => {
+  parseCard().catch((error) => setStatus(`解析失败: ${error}`));
+});
+document.getElementById("sync-card").addEventListener("click", syncForge);
 document.getElementById("save-card").addEventListener("click", () => saveCard(false));
 document.getElementById("write-card").addEventListener("click", () => saveCard(true));
+filter.addEventListener("input", renderFiles);
 
-loadFiles().then(() => {
-  output.textContent =
-    "KardsLiker 0.2\n\n流程：填写卡牌 -> 同步卡面 -> 生成代码 -> 写入 mod";
-}).catch((error) => {
-  output.textContent = String(error);
-});
+loadFiles()
+  .then(() => setStatus("就绪"))
+  .catch((error) => setStatus(String(error)));

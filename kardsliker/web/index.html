@@ -8,137 +8,83 @@
 <body>
   <header class="topbar">
     <div class="brand">KardsLiker <span>mod editor</span></div>
-    <nav class="tabs">
-      <button data-tab="card" class="active">卡牌</button>
-      <button data-tab="forge">卡面</button>
-      <button data-tab="project">项目</button>
-      <button data-tab="python">Python</button>
-      <button data-tab="kl">KL</button>
-    </nav>
-    <div class="status" id="status">就绪</div>
+    <div class="top-actions">
+      <button id="sync-card">同步卡面</button>
+      <button id="parse-card">解析 KL</button>
+      <button id="save-card">保存声明</button>
+      <div class="status" id="status">就绪</div>
+    </div>
   </header>
 
-  <main>
-    <aside class="sidebar">
-      <div class="sidebar-title">项目文件</div>
+  <main class="layout">
+    <aside class="resources">
+      <div class="zone-head">
+        <h2>资源区</h2>
+        <span>文件</span>
+      </div>
       <input id="filter" placeholder="筛选文件..." autocomplete="off">
       <div id="files" class="file-list"></div>
     </aside>
 
-    <section id="panel-card" class="panel active">
-      <div class="workflow">
-        <form id="card-form" class="card-form" autocomplete="off">
-          <h2>卡牌流程</h2>
-          <div class="form-row">
-            <label>ID <input id="card-id" value="card_new_unit"></label>
-            <label>名称 <input id="card-name" value="新单位"></label>
-          </div>
-          <div class="form-row">
-            <label>国家
-              <select id="card-country">
-                <option value="soviet">苏联</option>
-                <option value="britain">英国</option>
-                <option value="germany">德国</option>
-                <option value="japan">日本</option>
-                <option value="usa">美国</option>
-                <option value="france">法国</option>
-                <option value="italy">意大利</option>
-                <option value="poland">波兰</option>
-                <option value="finland">芬兰</option>
-                <option value="anzac">澳新</option>
-                <option value="neutral">中立</option>
-              </select>
-            </label>
-            <label>类型
-              <select id="card-type">
-                <option value="infantry">步兵</option>
-                <option value="tank">坦克</option>
-                <option value="artillery">炮兵</option>
-                <option value="fighter">战斗机</option>
-                <option value="bomber">轰炸机</option>
-                <option value="order">指令</option>
-                <option value="countermeasure">反制</option>
-              </select>
-            </label>
-            <label>稀有度
-              <select id="card-rarity">
-                <option value="standard">普通</option>
-                <option value="limited">限定</option>
-                <option value="special">特殊</option>
-                <option value="elite">精英</option>
-                <option value="none">衍生</option>
-              </select>
-            </label>
-          </div>
-          <div class="form-row stats">
-            <label>费用 <input id="card-cost" type="number" value="1"></label>
-            <label>行动 <input id="card-op" type="number" value="1"></label>
-            <label>攻击 <input id="card-at" type="number" value="1"></label>
-            <label>防御 <input id="card-df" type="number" value="2"></label>
-          </div>
-          <label class="wide">卡面文本
-            <textarea id="card-text" rows="4">部署：抽 1 张牌。</textarea>
-          </label>
-          <label class="wide">卡图路径（可选）
-            <input id="card-art" placeholder="例如 Soviet/unit.png">
-          </label>
-          <div class="workflow-actions">
-            <button type="button" id="sync-forge">同步到卡面</button>
-            <button type="button" id="generate-code">生成代码</button>
-            <button type="button" id="save-card">保存卡牌</button>
-            <button type="button" id="write-card">写入 mod</button>
-          </div>
-        </form>
-        <div class="workflow-preview">
-          <div class="preview-title">生成预览</div>
-          <pre id="card-code" class="console">填写左侧表单后点击“生成代码”。</pre>
-        </div>
+    <section class="workspace">
+      <div class="zone-head">
+        <h2>工作区</h2>
+        <nav class="workspace-tabs">
+          <button data-workspace="card" class="active">卡牌</button>
+          <button data-workspace="keyword">关键词</button>
+        </nav>
       </div>
-    </section>
 
-    <section id="panel-forge" class="panel forge-panel">
-      <iframe id="forge-frame" title="KARDS DIY" src="/forge/"></iframe>
-    </section>
-
-    <section id="panel-project" class="panel">
-      <h2>KardsLiker</h2>
-      <p>本地 KARDS mod 编辑器。</p>
-      <div class="cards">
-        <article><h3>卡牌流程</h3><p>填写数据，生成 KL 与 Python。</p></article>
-        <article><h3>DIY 卡面</h3><p>原版 KARDS DIY，同步卡牌字段。</p></article>
-        <article><h3>Python IDE</h3><p>浏览、编辑并运行 mod 文件。</p></article>
-      </div>
-      <pre id="output" class="console">KardsLiker 0.2</pre>
-    </section>
-
-    <section id="panel-python" class="panel">
-      <div class="editor-head">
-        <span id="current-file">未选择文件</span>
-        <div>
-          <button id="save">保存</button>
-          <button id="run">运行</button>
-        </div>
-      </div>
-      <div class="editor-wrap">
-        <textarea id="code" spellcheck="false" placeholder="从左侧选择一个 .py 文件"></textarea>
-      </div>
-      <pre id="run-output" class="console"></pre>
-    </section>
-
-    <section id="panel-kl" class="panel">
-      <div class="editor-head">
-        <span>KL 语法检查</span>
-        <div><button id="parse-kl">解析</button></div>
-      </div>
-      <textarea id="kl-code" class="kl-editor" spellcheck="false">card "card_example" {
+      <div id="workspace-card" class="workspace-panel active">
+        <div class="workspace-split">
+          <div class="face-pane">
+            <div class="pane-label">卡面制作</div>
+            <iframe id="forge-frame" title="KARDS DIY" src="/forge/"></iframe>
+          </div>
+          <div class="kl-pane">
+            <div class="pane-label">KL 流程</div>
+            <textarea id="kl-code" spellcheck="false">card "测试单位" {
+    id: card_test_unit
     type: infantry
+    country: soviet
+    rarity: standard
     cost: 1
+    operation_cost: 1
     at: 2
     df: 3
     text: "部署：抽 1 张牌。"
 }</textarea>
-      <pre id="kl-output" class="console"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="workspace-keyword" class="workspace-panel">
+        <div class="keyword-empty">
+          <h3>关键词工作区</h3>
+          <p>关键词编辑器骨架，后续接入 KL 关键词声明和触发流程。</p>
+        </div>
+      </div>
     </section>
+
+    <aside class="declarations">
+      <div class="zone-head">
+        <h2>声明区</h2>
+        <span id="declaration-target">等待解析</span>
+      </div>
+      <div id="declaration-meta" class="declaration-meta">
+        <div><b>名称</b><span>-</span></div>
+        <div><b>ID</b><span>-</span></div>
+        <div><b>国家 / 类型</b><span>-</span></div>
+      </div>
+      <pre id="card-code" class="declaration-code">在左侧编写 KL，然后点击“解析 KL”。</pre>
+      <div class="declaration-actions">
+        <button id="write-card">写入 mod</button>
+      </div>
+      <div class="file-view">
+        <div class="pane-label">资源预览</div>
+        <pre id="file-view">选择资源文件查看内容。</pre>
+      </div>
+    </aside>
   </main>
 
   <script src="app.js"></script>
