@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import tempfile
 import threading
 import time
 import webbrowser
@@ -34,10 +35,12 @@ def open_window(url: str) -> subprocess.Popen[bytes] | None:
     if edge is None:
         webbrowser.open(url)
         return None
+    profile = Path(tempfile.gettempdir()) / "kardsliker-edge"
     return subprocess.Popen(
         [
             str(edge),
             f"--app={url}",
+            f"--user-data-dir={profile}",
             "--window-size=1440,900",
             "--disable-features=Translate",
         ]
@@ -61,11 +64,12 @@ def main() -> None:
     if not args.no_window:
         process = open_window(url)
     try:
-        while True:
-            if process is not None and process.poll() is not None:
-                # Edge 会把实际窗口交给已有进程，不能只依赖子进程退出。
+        if process is None:
+            while True:
                 time.sleep(0.5)
-            time.sleep(0.5)
+        else:
+            while process.poll() is None:
+                time.sleep(0.3)
     except KeyboardInterrupt:
         pass
     finally:
