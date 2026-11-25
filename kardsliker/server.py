@@ -56,6 +56,124 @@ def safe_file(relative: str) -> Path | None:
     return None
 
 
+
+PROJECTS_DIR = HERE / "projects"
+CARD_TYPE_MAP = {
+    "infantry": "INFANTRY",
+    "tank": "TANK",
+    "artillery": "ARTILLERY",
+    "fighter": "FIGHTER",
+    "bomber": "BOMBER",
+    "order": "ORDER",
+    "countermeasure": "COUNTERMEASURE",
+}
+COUNTRY_MAP = {
+    "germany": ("GERMANY", "Germany"),
+    "britain": ("BRITAIN", "Britain"),
+    "japan": ("JAPAN", "Japan"),
+    "soviet": ("SOVIET", "Soviet"),
+    "usa": ("USA", "USA"),
+    "france": ("FRANCE", "France"),
+    "italy": ("ITALY", "Italy"),
+    "poland": ("POLAND", "Poland"),
+    "finland": ("FINLAND", "Finland"),
+    "anzac": ("ANZAC", "Anzac"),
+    "neutral": ("NEUTRAL", "Neutral"),
+}
+RARITY_MAP = {
+    "standard": "STANDARD",
+    "limited": "LIMITED",
+    "special": "SPECIAL",
+    "elite": "ELITE",
+    "none": "NONE",
+}
+
+
+def _safe_id(value: object) -> str:
+    raw = str(value or "new_card").strip().lower().replace(" ", "_")
+    return "".join(char for char in raw if char.isalnum() or char in "_-") or "new_card"
+
+
+def generate_kl(data: dict[str, object]) -> str:
+    """由卡牌表单生成 KL 源码。"""
+    fields = [
+        ("type", data.get("type", "infantry")),
+        ("country", data.get("country", "soviet")),
+        ("rarity", data.get("rarity", "standard")),
+        ("cost", data.get("cost", 0)),
+        ("operation_cost", data.get("operation_cost", 0)),
+        ("at", data.get("at", 0)),
+        ("df", data.get("df", 0)),
+        ("text", data.get("text", "")),
+    ]
+    lines = [f'card "{data.get("name", "未命名卡牌")}" {{']
+    for key, value in fields:
+        if isinstance(value, str):
+            text = value.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'    {key}: "{text}"')
+        else:
+            lines.append(f"    {key}: {value}")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def generate_python(data: dict[str, object]) -> str:
+    """由卡牌表单生成可直接放入 mods 的卡牌 Python 骨架。"""
+    country_name, folder = COUNTRY_MAP.get(str(data.get("country", "soviet")), ("SOVIET", "Soviet"))
+    type_name = CARD_TYPE_MAP.get(str(data.get("type", "infantry")), "INFANTRY")
+    rarity_name = RARITY_MAP.get(str(data.get("rarity", "standard")), "STANDARD")
+    name = str(data.get("name", "未命名卡牌"))
+    text = str(data.get("text", ""))
+    art = str(data.get("art", "") or "")
+    art_line = f'    art="{art}",\n' if art else ""
+    return f"""# {name}
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[5]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from main import CardData, CardType, Country, Rarity
+
+CARD_DATA = CardData(
+    type=CardType.{type_name},
+    country=Country.{country_name},
+    cost={int(data.get("cost", 0) or 0)},
+    display_name={json.dumps(name, ensure_ascii=False)},
+    text={json.dumps(text, ensure_ascii=False)},
+{art_line}    rare=Rarity.{rarity_name},
+    at={int(data.get("at", 0) or 0)},
+    df={int(data.get("df", 0) or 0)},
+    operation_cost={int(data.get("operation_cost", 0) or 0)},
+)
+"""
+
+
+def card_paths(data: dict[str, object]) -> tuple[Path, Path]:
+    """返回卡牌项目 JSON 与 Python 输出路径。"""
+    card_id = _safe_id(data.get("id"))
+    file_id = card_id[5:] if card_id.startswith("card_") else card_id
+    _, folder = COUNTRY_MAP.get(str(data.get("country", "soviet")), ("SOVIET", "Soviet"))
+    project = PROJECTS_DIR / f"{card_id}.json"
+    python = GAME_ROOT / "mods" / "kards" / "code" / "cards" / folder / f"card_{file_id}.py"
+    return project, python
+
+
+def load_projects() -> list[dict[str, object]]:
+    """读取已保存的卡牌项目。"""
+    result: list[dict[str, object]] = []
+    if PROJECTS_DIR.is_dir():
+        for path in sorted(PROJECTS_DIR.glob("*.json")):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(raw, dict):
+                result.append(raw)
+    return result
+
+
 class KardsLikerHandler(BaseHTTPRequestHandler):
     """KardsLiker HTTP 处理器。"""
 
@@ -99,6 +217,9 @@ class KardsLikerHandler(BaseHTTPRequestHandler):
                     if path.is_file() and path.suffix in {".py", ".json", ".md", ".txt", ".kl"}:
                         files.append(str(path.relative_to(PROJECT_ROOT)).replace("\\", "/"))
             self.send_json({"ok": True, "files": files[:1000]})
+            return
+        if parsed.path == "/api/cards":
+            self.send_json({"ok": True, "cards": load_projects()})
             return
         if parsed.path == "/api/file":
             relative = parse_qs(parsed.query).get("path", [""])[0]
@@ -176,6 +297,42 @@ class KardsLikerHandler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": "运行超时（30 秒）"}, 408)
             except OSError as exc:
                 self.send_json({"ok": False, "error": str(exc)}, 500)
+            return
+        if parsed.path == "/api/card/generate":
+            if not isinstance(payload, dict):
+                self.send_json({"ok": False, "error": "请求体必须是对象"}, 400)
+                return
+            _, py_path = card_paths(payload)
+            self.send_json(
+                {
+                    "ok": True,
+                    "id": _safe_id(payload.get("id")),
+                    "kl": generate_kl(payload),
+                    "python": generate_python(payload),
+                    "target": str(py_path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+                }
+            )
+            return
+        if parsed.path == "/api/card/save":
+            if not isinstance(payload, dict):
+                self.send_json({"ok": False, "error": "请求体必须是对象"}, 400)
+                return
+            project, py_path = card_paths(payload)
+            PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+            project.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            written = False
+            if bool(payload.get("write_py")):
+                py_path.parent.mkdir(parents=True, exist_ok=True)
+                py_path.write_text(generate_python(payload), encoding="utf-8")
+                written = True
+            self.send_json(
+                {
+                    "ok": True,
+                    "project": str(project.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+                    "python": str(py_path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+                    "written": written,
+                }
+            )
             return
         if parsed.path == "/api/kl":
             if not isinstance(payload, dict) or not isinstance(payload.get("source"), str):
