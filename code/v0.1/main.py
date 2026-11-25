@@ -8884,12 +8884,21 @@ class CardBrowser:
         assets: Path,
         font: Font,
         deck: Deck,
+        decks: list[Deck] | None = None,
     ) -> None:
         self.loader: ImageLoader = loader
         self.assets: Path = assets
         self.font: Font = font
         self.small: Font = load_font(max(12, font.get_height() * 2 // 3))
         self.deck: Deck = deck
+        self.decks: list[Deck] = decks if decks is not None else [deck]
+        self.art_index: dict[str, Any] = {}
+        index_path = assets.parent / "data" / "art_index.json"
+        if index_path.is_file():
+            try:
+                self.art_index = _string_dict(json.loads(index_path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                self.art_index = {}
         self.mode: str = "deck"
         self.scroll: int = 0
         self.card_rects: list[tuple[pygame.Rect, Card]] = []
@@ -8900,8 +8909,6 @@ class CardBrowser:
         self.collection: list[Card] | None = None
 
     def _current_cards(self) -> list[Card]:
-        if self.mode == "deck":
-            return self.deck.cards
         if self.collection is None:
             self.collection = [
                 cards.create(card_id)
@@ -8921,8 +8928,53 @@ class CardBrowser:
                 image = pygame.image.load(str(path)).convert_alpha()
             except pygame.error:
                 image = None
+        if image is None:
+            entry = self.art_index.get(card.display_name) or self.art_index.get(card.name)
+            if isinstance(entry, dict):
+                relative = entry.get("path")
+                if isinstance(relative, str):
+                    fallback = self.assets / "cards" / relative
+                    if fallback.is_file():
+                        try:
+                            image = pygame.image.load(str(fallback)).convert_alpha()
+                        except pygame.error:
+                            image = None
         self.art_cache[key] = image
         return image
+
+    def _draw_decks(self, screen: Surface, mouse: tuple[int, int]) -> None:
+        """绘制卡组列表。"""
+        margin = 40
+        gap = 20
+        width = (screen.get_width() - margin * 2 - gap) // 2
+        height = 160
+        top = 130
+        self.card_rects = []
+        for index, deck in enumerate(self.decks):
+            col = index % 2
+            row = index // 2
+            rect = pygame.Rect(
+                margin + col * (width + gap),
+                top + row * (height + gap),
+                width,
+                height,
+            )
+            hover = rect.collidepoint(mouse)
+            pygame.draw.rect(screen, (62, 70, 58) if hover else (48, 55, 47), rect, border_radius=10)
+            pygame.draw.rect(screen, (205, 190, 140), rect, 2, border_radius=10)
+            title = self.font.render(deck.name or "未命名卡组", True, (240, 230, 195))
+            screen.blit(title, (rect.x + 22, rect.y + 18))
+            ally = deck.ally_country.value if deck.ally_country else "无"
+            info = self.small.render(
+                f"{deck.main_country.value} / {ally}    {len(deck.cards)} 张    {deck.card_back}",
+                True,
+                (200, 195, 165),
+            )
+            screen.blit(info, (rect.x + 22, rect.y + 58))
+            back = self.loader.load(self.assets / "cards" / "card_back.png")
+            thumb = pygame.transform.smoothscale(back, (72, 100))
+            screen.blit(thumb, (rect.right - 100, rect.y + 34))
+            self.card_rects.append((rect, deck.hq))
 
     def _layout(self, screen: Surface, count: int) -> tuple[int, int, int, int, int]:
         margin = 24
@@ -8953,6 +9005,10 @@ class CardBrowser:
         pygame.draw.rect(screen, (55, 65, 56), self.back_rect, border_radius=8)
         pygame.draw.rect(screen, (180, 170, 135), self.back_rect, 2, border_radius=8)
         self._center_text(screen, "返回", self.back_rect.center, (230, 225, 200), self.font)
+
+        if self.mode == "deck":
+            self._draw_decks(screen, mouse)
+            return
 
         current = self._current_cards()
         margin, top, cell_w, cell_h, rows = self._layout(screen, len(current))
@@ -9024,6 +9080,10 @@ class CardBrowser:
                 self.scroll = 0
             elif self.back_rect.collidepoint(event.pos):
                 Global.status.scene = SCENE_MENU
+            elif self.mode == "deck":
+                for rect, _ in self.card_rects:
+                    if rect.collidepoint(event.pos):
+                        break
         elif event.type == pygame.MOUSEWHEEL:
             self.scroll += -1 if event.y > 0 else 1
             self.scroll = max(0, self.scroll)
@@ -9187,15 +9247,27 @@ def main() -> None:
         loader.load(assets / "ui" / "开始背景.png"), screen.get_size()
     )
     font = load_font(36)
-    browser_deck = make_deck(
-        default_deck_ids(),
-        Player.A,
-        Country.SOVIET,
-        name=DEFAULT_DECK_NAME,
-        card_back="card_back.png",
-        ally_country=Country.BRITAIN,
+    load_decks()
+    browser_decks: list[Deck] = []
+    for deck_name, deck_ids in DECKS.items():
+        ally = Country.BRITAIN if deck_name == "苏英弹药" else Country.BRITAIN
+        browser_decks.append(
+            make_deck(
+                deck_ids,
+                Player.A,
+                Country.SOVIET,
+                name=deck_name,
+                card_back="card_back.png",
+                ally_country=ally,
+            )
+        )
+    Global.card_browser = CardBrowser(
+        loader,
+        assets,
+        font,
+        browser_decks[0],
+        browser_decks,
     )
-    Global.card_browser = CardBrowser(loader, assets, font, browser_deck)
 
     start_y = (screen.get_height() - button_size * 2 - button_gap) // 2
     start_rect = pygame.Rect(40, start_y, button_size, button_size)
