@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import webbrowser
@@ -27,6 +28,7 @@ GAME_ROOT = PROJECT_ROOT / "kardslike"
 WEB_ROOT = HERE / "web"
 FORGE_ROOT = HERE / "forge" / "kards_diy_web"
 EDIT_ROOTS = (GAME_ROOT / "mods", GAME_ROOT)
+KEYWORD_DIR = GAME_ROOT / "mods" / "kards" / "code" / "keywords"
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -181,6 +183,30 @@ def load_projects() -> list[dict[str, object]]:
     return result
 
 
+
+def load_keywords() -> list[dict[str, str]]:
+    """从 mod 关键词文件读取可导入的关键词。"""
+    result: list[dict[str, str]] = []
+    if not KEYWORD_DIR.is_dir():
+        return result
+    for path in sorted(KEYWORD_DIR.glob("*.py")):
+        if path.stem.startswith("_"):
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', source)
+        result.append(
+            {
+                "id": path.stem,
+                "name": match.group(1) if match else path.stem,
+                "path": f"kardslike/mods/kards/code/keywords/{path.name}",
+            }
+        )
+    return result
+
+
 class KardsLikerHandler(BaseHTTPRequestHandler):
     """KardsLiker HTTP 处理器。"""
 
@@ -215,6 +241,9 @@ class KardsLikerHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/keywords":
+            self.send_json({"ok": True, "keywords": load_keywords()})
+            return
         if parsed.path == "/api/files":
             files: list[str] = []
             for root in EDIT_ROOTS:

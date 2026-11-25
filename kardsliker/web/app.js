@@ -16,6 +16,7 @@ const resourceCount = document.getElementById("resource-count");
 let files = [];
 let selectedFile = "";
 let selectedCard = null;
+let availableKeywords = [];
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -74,6 +75,15 @@ async function loadFiles() {
   const data = await api("/api/files");
   files = data.files || [];
   renderFiles();
+}
+
+async function loadKeywords() {
+  try {
+    const data = await api("/api/keywords");
+    availableKeywords = data.keywords || [];
+  } catch (error) {
+    availableKeywords = [];
+  }
 }
 
 async function openFile(path) {
@@ -326,6 +336,21 @@ function updateSuggestions() {
   const relativeIndent = indent.length - sectionIndent;
   const insideSection = Boolean(section) && (relativeIndent > 0 || line.trim() === "");
 
+  const keywordMatch = rest.match(/^(?:KEYWORDS|keywords)\s*:\s*\[([^\]]*)$/i);
+  if (keywordMatch) {
+    const content = keywordMatch[1];
+    const commaIndex = content.lastIndexOf(",");
+    const token = content.slice(commaIndex + 1).trim().toLowerCase();
+    const bracketIndex = rest.indexOf("[");
+    let tokenStart = line.length - rest.length + bracketIndex + 1 + commaIndex + 1;
+    while (klCode.value[tokenStart] === " ") tokenStart += 1;
+    const items = availableKeywords
+      .map((item) => item.id)
+      .filter((item) => item.toLowerCase().startsWith(token));
+    showSuggestions(items, tokenStart);
+    return;
+  }
+
   const enumMatch = rest.match(/^(TYPE|COUNTRY|RARE)\s*:\s*(.*)$/i);
   if (enumMatch) {
     const key = enumMatch[1].toUpperCase();
@@ -382,7 +407,10 @@ const TYPE_SHORT = {
 };
 const COUNTRY_ALIASES = {
   su: "soviet", soviet: "soviet", sovietunion: "soviet",
-  ge: "germany", de: "germany", germany: "germany",
+  ge: "germany", de: "germany", ger: "germany", germany: "germany",
+  sov: "soviet", bri: "britain", jpn: "japan", ame: "usa",
+  fra: "france", ita: "italy", pol: "poland", fin: "finland",
+  anz: "anzac", neu: "neutral",
   br: "britain", uk: "britain", britain: "britain",
   jp: "japan", japan: "japan", us: "usa", usa: "usa",
   fr: "france", france: "france", it: "italy", italy: "italy",
@@ -630,6 +658,7 @@ filter.addEventListener("input", renderFiles);
 
 updateHighlight();
 scheduleKlCheck();
+loadKeywords();
 loadFiles()
   .then(() => setStatus("就绪"))
   .catch((error) => setStatus(String(error)));
