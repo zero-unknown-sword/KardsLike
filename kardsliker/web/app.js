@@ -288,34 +288,77 @@ function showSuggestions(items, start) {
   klSuggest.hidden = false;
 }
 
-function updateSuggestions() {
+function currentKlContext() {
   const position = klCode.selectionStart;
   const before = klCode.value.slice(0, position);
-  const lineStart = before.lastIndexOf("\n") + 1;
-  const line = before.slice(lineStart);
+  const lines = before.split("\n");
+  const line = lines[lines.length - 1] || "";
+  let section = "";
+  let sectionIndent = 0;
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const match = lines[index].match(/^(\s*)(IMPORT|IMPORTS|DEPEND|DEPENDS|DEPENDENCY|DEPENDENCIES|REQUIRE|REQUIRES|SET_UNIT|SET_PROCEDURES)\s*$/i);
+    if (match) {
+      section = match[2].toUpperCase();
+      sectionIndent = match[1].length;
+    }
+  }
+  return { position, line, section, sectionIndent };
+}
+
+function fieldSuggestionsFor(section) {
+  if (section === "IMPORT" || section === "IMPORTS") {
+    return ["kards", "keywords: "];
+  }
+  if (section === "DEPEND" || section === "DEPENDS" || section === "DEPENDENCY"
+      || section === "DEPENDENCIES" || section === "REQUIRE" || section === "REQUIRES") {
+    return ["kards"];
+  }
+  if (section === "SET_UNIT") {
+    return SUGGEST_FIELDS;
+  }
+  return [];
+}
+
+function updateSuggestions() {
+  const { position, line, section, sectionIndent } = currentKlContext();
   const indent = line.match(/^\s*/)?.[0] || "";
   const rest = line.slice(indent.length);
+  const relativeIndent = indent.length - sectionIndent;
+  const insideSection = Boolean(section) && (relativeIndent > 0 || line.trim() === "");
+
   const enumMatch = rest.match(/^(TYPE|COUNTRY|RARE)\s*:\s*(.*)$/i);
   if (enumMatch) {
     const key = enumMatch[1].toUpperCase();
     const needle = enumMatch[2].trim().toLowerCase();
     const items = (SUGGEST_ENUMS[key] || []).filter((item) => item.toLowerCase().startsWith(needle));
     const colonIndex = rest.indexOf(":");
-    let valueStart = lineStart + indent.length + colonIndex + 1;
+    let valueStart = line.length - rest.length + colonIndex + 1;
     while (klCode.value[valueStart] === " ") valueStart += 1;
     showSuggestions(items, valueStart);
     return;
   }
-  const keyMatch = rest.match(/^([A-Za-z_\/]+)$/);
+
+  const keyMatch = rest.match(/^([A-Za-z_\/]*)$/);
   if (keyMatch) {
     const needle = keyMatch[1].toLowerCase();
-    const items = SUGGEST_FIELDS.filter((item) => item.toLowerCase().startsWith(needle));
-    showSuggestions(items, lineStart + indent.length);
+    let items;
+    if (insideSection && !rest.trim() && relativeIndent === 0) {
+      items = [...fieldSuggestionsFor(section), ...SUGGEST_SECTIONS];
+    } else if (insideSection) {
+      items = fieldSuggestionsFor(section);
+    } else {
+      items = SUGGEST_SECTIONS;
+    }
+    items = items.filter((item) => item.toLowerCase().startsWith(needle));
+    showSuggestions(items, position - rest.length);
     return;
   }
+
   if (!rest.trim()) {
-    const items = indent.length === 0 ? SUGGEST_SECTIONS : SUGGEST_FIELDS;
-    showSuggestions(items, lineStart + indent.length);
+    const items = insideSection
+      ? (relativeIndent > 0 ? fieldSuggestionsFor(section) : [...fieldSuggestionsFor(section), ...SUGGEST_SECTIONS])
+      : SUGGEST_SECTIONS;
+    showSuggestions(items, position);
     return;
   }
   hideSuggestions();
@@ -499,7 +542,7 @@ async function pullFromForge() {
     };
     const number = (id) => Number.parseInt(textOf(id), 10) || 0;
     const typeName = PULL_TYPE_MAP[fileStem(doc.getElementById("type"))] || selectedCard?.type || "infantry";
-    const countryName = fileStem(doc.getElementById("faction")).toLowerCase() || selectedCard?.country || "soviet";
+    const countryName = normalizeCountry(fileStem(doc.getElementById("faction")) || selectedCard?.country || "soviet");
     const rarityName = PULL_RARITY_MAP[fileStem(doc.getElementById("rarity"))] || selectedCard?.rarity || "standard";
     const currentSource = klCode.value;
     const idMatch = currentSource.match(/^\s*ID\s*:\s*"?([^"\s,]+)"?/im);

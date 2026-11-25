@@ -459,6 +459,8 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
                 indent = len(raw) - len(raw.lstrip(" "))
                 if field_indent is None:
                     field_indent = indent
+                    if indent != 4:
+                        warnings.append("SET_UNIT 字段建议使用 4 个空格缩进")
                 elif indent != field_indent:
                     warnings.append(
                         f"SET_UNIT 缩进不一致：第 {index + 1} 行应为 {field_indent} 个空格"
