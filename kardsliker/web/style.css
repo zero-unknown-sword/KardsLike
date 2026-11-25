@@ -65,7 +65,13 @@ main { flex: 1; min-height: 0; display: flex; }
 .face-pane, .kl-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .face-pane { border-right: 1px solid var(--line); }
 .pane-label { padding: 10px 14px; color: var(--accent); font-size: 12px; border-bottom: 1px solid var(--line); background: #1b211c; flex: none; }
-.face-pane iframe { width: 100%; flex: 1; border: 0; background: #fff; }
+.face-pane iframe {
+  width: 100%;
+  flex: 1;
+  border: 0;
+  background: #fff;
+  transform: translate(18px, -10px);
+}
 .kl-editor-wrap {
   position: relative;
   flex: 1;
@@ -104,7 +110,9 @@ main { flex: 1; min-height: 0; display: flex; }
 .kl-highlight .kl-key { color: #9bc7e8; }
 .kl-highlight .kl-string { color: #b8d49a; }
 .kl-highlight .kl-number { color: #e39a78; }
-.kl-highlight .kl-enum { color: #d6a6e8; font-weight: 600; }
+.kl-highlight .kl-enum-type { color: #7fc7e8; font-weight: 600; }
+.kl-highlight .kl-enum-country { color: #e8b97f; font-weight: 600; }
+.kl-highlight .kl-enum-rarity { color: #c6a6e8; font-weight: 600; }
 .kl-highlight .kl-comment { color: #6f7868; font-style: italic; }
 .kl-status { float: right; color: #9a9988; font-size: 11px; font-weight: normal; }
 .kl-status.ok { color: #8fbd72; }

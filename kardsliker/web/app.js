@@ -113,7 +113,12 @@ function highlightKl(source) {
       const value = key[5];
       let valueHtml = escapeHtml(value);
       if (enumKeys.has(keyName)) {
-        valueHtml = `<span class="kl-enum">${escapeHtml(value)}</span>`;
+        const enumClass = keyName === "TYPE"
+          ? "kl-enum-type"
+          : keyName === "COUNTRY" || keyName === "FACTION"
+            ? "kl-enum-country"
+            : "kl-enum-rarity";
+        valueHtml = `<span class="kl-enum ${enumClass}">${escapeHtml(value)}</span>`;
       } else if (/^".*"$/.test(value)) {
         valueHtml = `<span class="kl-string">${escapeHtml(value)}</span>`;
       } else if (/^-?\d+$/.test(value.trim())) {
@@ -237,11 +242,11 @@ klCode.addEventListener("keydown", handleKlKeydown);
 const SUGGEST_SECTIONS = ["IMPORT", "DEPENDENCIES", "SET_UNIT", "SET_PROCEDURES"];
 const SUGGEST_FIELDS = [
   "NAME", "ID", "TYPE", "COUNTRY", "RARE", "CT/COST", "OC/OPERATION_COST",
-  "AT", "DF", "KEYWORDS", "DESCRIPTION",
+  "AT", "DF", "KEYWORDS", "keywords", "DESCRIPTION",
 ];
 const SUGGEST_ENUMS = {
-  TYPE: ["INF", "TANK", "ART", "FTR", "BMB", "ORD", "CTR"],
-  COUNTRY: ["SU", "GE", "BR", "JP", "US", "FR", "IT", "PL", "FI", "AN", "NE"],
+  TYPE: ["INF", "TK", "ART", "FTR", "BMB", "ORD", "CTR", "infantry", "tank", "artillery", "fighter", "bomber", "order", "countermeasure"],
+  COUNTRY: ["SU", "GE", "BR", "JP", "US", "FR", "IT", "PL", "FI", "AN", "NE", "soviet", "germany", "britain", "japan", "usa", "france", "italy", "poland", "finland", "anzac", "neutral"],
   RARE: ["STANDARD", "LIMITED", "SPECIAL", "ELITE", "NONE"],
 };
 
@@ -317,19 +322,19 @@ function updateSuggestions() {
 }
 
 const TYPE_INDEX = {
-  infantry: 1, tank: 2, artillery: 3, fighter: 4, bomber: 5, order: 6, countermeasure: 7,
+  infantry: 0, tank: 1, artillery: 2, fighter: 3, bomber: 4, order: 5, countermeasure: 6,
 };
 const FACTION_INDEX = {
-  germany: 1, britain: 2, japan: 3, soviet: 4, usa: 5, france: 6,
-  italy: 7, poland: 8, finland: 9, anzac: 10, neutral: 11,
+  germany: 0, britain: 1, japan: 2, soviet: 3, usa: 4, france: 5,
+  italy: 6, poland: 7, finland: 8, anzac: 9, neutral: 10,
 };
-const RARITY_INDEX = { standard: 1, limited: 2, special: 3, elite: 4, none: 5 };
+const RARITY_INDEX = { standard: 0, limited: 1, special: 2, elite: 3, none: 4 };
 const COUNTRY_SHORT = {
   soviet: "SU", germany: "GE", britain: "BR", japan: "JP", usa: "US",
   france: "FR", italy: "IT", poland: "PL", finland: "FI", anzac: "AN", neutral: "NE",
 };
 const TYPE_SHORT = {
-  infantry: "INF", tank: "TANK", artillery: "ART", fighter: "FTR",
+  infantry: "INF", tank: "TK", artillery: "ART", fighter: "FTR",
   bomber: "BMB", order: "ORD", countermeasure: "CTR",
 };
 const COUNTRY_ALIASES = {
@@ -342,7 +347,7 @@ const COUNTRY_ALIASES = {
   an: "anzac", anzac: "anzac", ne: "neutral", neutral: "neutral",
 };
 const TYPE_ALIASES = {
-  inf: "infantry", infantry: "infantry", tank: "tank",
+  inf: "infantry", infantry: "infantry", tank: "tank", tk: "tank",
   art: "artillery", artillery: "artillery", ftr: "fighter", fighter: "fighter",
   bmb: "bomber", bomber: "bomber", ord: "order", order: "order",
   ctr: "countermeasure", countermeasure: "countermeasure",
@@ -433,9 +438,9 @@ async function syncForge() {
       return;
     }
     await win.KardsDIY.setCard({
-      typeIndex: TYPE_INDEX[card.type] || 1,
-      factionIndex: FACTION_INDEX[card.country] || 4,
-      rarityIndex: RARITY_INDEX[card.rarity] || 1,
+      typeIndex: TYPE_INDEX[card.type] ?? 0,
+      factionIndex: FACTION_INDEX[card.country] ?? 3,
+      rarityIndex: RARITY_INDEX[card.rarity] ?? 0,
       setIndex: 0,
       title: card.name,
       cost: card.cost,
@@ -497,7 +502,7 @@ async function pullFromForge() {
     const countryName = fileStem(doc.getElementById("faction")).toLowerCase() || selectedCard?.country || "soviet";
     const rarityName = PULL_RARITY_MAP[fileStem(doc.getElementById("rarity"))] || selectedCard?.rarity || "standard";
     const currentSource = klCode.value;
-    const idMatch = currentSource.match(/^\s*ID\s*:\s*([^\s,]+)/im);
+    const idMatch = currentSource.match(/^\s*ID\s*:\s*"?([^"\s,]+)"?/im);
     const keywordMatch = currentSource.match(/^\s*KEYWORDS\s*:\s*\[([^\]]*)\]/im);
     const keywords = keywordMatch
       ? keywordMatch[1].split(",").map((item) => item.trim()).filter(Boolean)
@@ -526,7 +531,7 @@ async function pullFromForge() {
     updateMeta(card);
     let source = klCode.value;
     source = setKlValue(source, /^(\s*NAME\s*:\s*).*$/im, JSON.stringify(card.name), `NAME: ${JSON.stringify(card.name)}`);
-    source = setKlValue(source, /^(\s*ID\s*:\s*).*$/im, card.id, `ID: ${card.id}`);
+    source = setKlValue(source, /^(\s*ID\s*:\s*).*$/im, JSON.stringify(card.id), `ID: ${JSON.stringify(card.id)}`);
     source = setKlValue(source, /^(\s*TYPE\s*:\s*).*$/im, TYPE_SHORT[card.type] || card.type, `TYPE: ${TYPE_SHORT[card.type] || card.type}`);
     source = setKlValue(source, /^(\s*COUNTRY\s*:\s*).*$/im, COUNTRY_SHORT[card.country] || card.country, `COUNTRY: ${COUNTRY_SHORT[card.country] || card.country}`);
     source = setKlValue(source, /^(\s*RARE\s*:\s*).*$/im, card.rarity, `RARE: ${card.rarity}`);

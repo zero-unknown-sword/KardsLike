@@ -61,6 +61,7 @@ TYPE_ALIASES = {
     "inf": "infantry",
     "infantry": "infantry",
     "tank": "tank",
+    "tk": "tank",
     "art": "artillery",
     "artillery": "artillery",
     "ftr": "fighter",
@@ -409,11 +410,17 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
     dependencies: list[str] = []
     fields: dict[str, Any] = {}
     procedures = ""
+    warnings: list[str] = []
+    quote_errors: list[str] = []
+    field_indent: int | None = None
     index = 0
     last_order = -1
     while index < len(lines):
         section = _section_name(lines[index])
         if section is None:
+            stripped = lines[index].strip()
+            if stripped and not lines[index].startswith((" ", "\t")) and re.fullmatch(r"[A-Z][A-Z0-9_]*", stripped):
+                warnings.append(f"未知数据段: {stripped}")
             index += 1
             continue
         order = SECTION_ORDER.get(section, -1)
@@ -425,7 +432,12 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
         last_order = order
         if section in {"IMPORT", "IMPORTS"}:
             values, index = _collect_section(lines, index + 1)
-            imports.extend(_strip_commas(value) for value in values if _strip_commas(value))
+            for value in values:
+                cleaned = _strip_commas(value)
+                if cleaned.lower().startswith("keywords:"):
+                    fields["keywords"] = _parse_scalar(cleaned.split(":", 1)[1])
+                elif cleaned:
+                    imports.append(cleaned)
             continue
         if section in {"DEPEND", "DEPENDS", "DEPENDENCY", "DEPENDENCIES", "REQUIRE", "REQUIRES"}:
             values, index = _collect_section(lines, index + 1)
@@ -444,10 +456,20 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
                 if ":" not in stripped:
                     index += 1
                     continue
+                indent = len(raw) - len(raw.lstrip(" "))
+                if field_indent is None:
+                    field_indent = indent
+                elif indent != field_indent:
+                    warnings.append(
+                        f"SET_UNIT 缩进不一致：第 {index + 1} 行应为 {field_indent} 个空格"
+                    )
                 key, value = stripped.split(":", 1)
                 key = key.strip().upper().replace(" ", "_")
                 key_options = {key, *key.split("/")}
                 value = value.strip()
+                if key_options & {"NAME", "ID", "DESCRIPTION", "TEXT", "BODY"}:
+                    if not (value.startswith('"') or value.startswith('"""')):
+                        quote_errors.append(f"{key} 必须使用双引号")
                 if value.startswith('"""'):
                     collected: list[str] = [value[3:]]
                     index += 1
@@ -502,6 +524,8 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
             procedures = "\n".join(collected).strip()
             continue
         index += 1
+    if quote_errors:
+        raise KLError("字符串字段必须使用双引号：" + "；".join(quote_errors))
     name = str(fields.get("name", fields.get("id", "未命名卡牌")))
     card = {
         "name": name,
@@ -510,7 +534,7 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
         "imports": imports,
         "dependencies": dependencies,
     }
-    card["warnings"] = validate_card(card)
+    card["warnings"] = warnings + validate_card(card)
     return [card]
 
 
