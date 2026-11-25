@@ -2238,6 +2238,11 @@ class BattleGround:
     def deal_initial_hands(self) -> None:
         """对局开始发牌, 先手 4 张后手 5 张"""
         second = self.first_player.opponent
+        logger.trace(
+            "初始发牌: player=%s 4 张, player=%s 5 张, 不触发 DRAW",
+            self.first_player,
+            second,
+        )
         for _ in range(4):
             self.draw(
                 self.first_player,
@@ -2285,6 +2290,13 @@ class BattleGround:
             抽到的卡牌, 卡组为空时为 None
         """
         card = self.decks[player].draw()
+        logger.trace(
+            "抽牌: player=%s card=%s count_as_draw=%s deck_left=%s",
+            player,
+            card.card_id if card is not None else None,
+            count_as_draw,
+            len(self.decks[player].cards),
+        )
         if card is None:
             self.morale_damage(player, source=source)
             return None
@@ -3045,6 +3057,13 @@ class BattleGround:
             return False
         if self.pending_choose is not None:
             return False
+        logger.trace(
+            "尝试使用: player=%s card=%s cost=%s type=%s",
+            player,
+            card.card_id,
+            card.effective_cost,
+            card.type,
+        )
         if card not in self.hands[player].cards:
             return False
         if card.sub_type == "weather" and self.weather_used_turn[player] == self.turn_count:
@@ -3293,6 +3312,13 @@ class BattleGround:
         if card.zone is not Zone.BOARD:
             return
         owner = card.controller
+        logger.trace(
+            "压制: card=%s player=%s until_turn_end=%s turn=%s",
+            card.card_id,
+            card.controller,
+            until_turn_end,
+            self.turn_count,
+        )
         card.suppressed = True
         card.suppressed_turn = self.turns_taken[owner]
         if until_turn_end:
@@ -3414,6 +3440,7 @@ class BattleGround:
             self.hands[request.player].remove(source)
         if source not in self.discards[request.player]:
             self.discards[request.player].append(source)
+        logger.trace("抉择结算: player=%s source=%s option=%s", request.player, source.card_id, option.card.card_id)
         source.zone = Zone.DISCARD
         option.action()
         self.emit_use_after(request.player, source)
@@ -4104,6 +4131,13 @@ class BattleGround:
         """
         if card.has_tag(CardTag.UNINHIBITABLE):
             return
+        logger.trace(
+            "抑制: card=%s player=%s at=%s df=%s",
+            card.card_id,
+            card.controller,
+            card.at,
+            card.df,
+        )
         card.inhibited = True
         card.keywords.clear()
         card.aura_keywords.clear()

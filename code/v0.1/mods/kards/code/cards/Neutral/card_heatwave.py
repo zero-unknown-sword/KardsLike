@@ -23,22 +23,21 @@ from main import (
 from mods.kards.code.weather import add_turn_hook, start_climate_choice
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
-    """所有陆军 +2 攻击力, 空军 +3 攻击力, 直到回合结束"""
+    """所有陆军 +2 攻击力, 空军 +3 攻击力, 持续到回合结束"""
     player = event.player
 
     def amount_for(unit: Card) -> int:
         return 2 if unit.type in (CardType.INFANTRY, CardType.TANK, CardType.ARTILLERY) else 3
 
-    for unit in ground.all_targets():
-        if unit.is_unit:
-            unit.add_temporary_at(amount_for(unit))
+    def apply_aura(event: Event, ground: BattleGround) -> None:
+        for unit in ground.all_targets():
+            if unit.is_unit:
+                ground.add_aura(unit, at=amount_for(unit), source=card)
 
-    def on_enter(event: Event, ground: BattleGround) -> None:
-        unit = event.dict.get("card")
-        if isinstance(unit, Card) and unit.is_unit:
-            unit.add_temporary_at(amount_for(unit))
+    # 与西肯特郡团相同的持续光环, 新入场单位下一帧自然获得
+    apply_aura(event, ground)
+    add_turn_hook(ground, player, EventType.LOOP, apply_aura)
 
-    add_turn_hook(ground, player, EventType.ENTER, on_enter)
 
 CARD_DATA = CardData(
     type=CardType.ORDER,
