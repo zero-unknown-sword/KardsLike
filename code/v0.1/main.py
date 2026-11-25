@@ -467,6 +467,16 @@ class EventType(IntEnum):
         player: 使用者
         targets: 使用时的目标列表
     """
+    USE_AFTER = pygame.event.custom_type()
+    """
+    指令使用后, 在指令效果结算完成后触发
+
+    数据:
+        card: 使用的卡牌
+        source: 触发源
+        player: 使用者
+        targets: 使用时的目标列表
+    """
     PLAY = USE
     """使用卡牌, USE 的别名"""
     TARGETED = pygame.event.custom_type()
@@ -3155,6 +3165,7 @@ class BattleGround:
                 else:
                     self.damage(self.hqs[player.opponent], card.cost, card, DamageType.NONE)
             self.check_victory()
+            self.emit_use_after(player, card)
             return True
         return False
 
@@ -3390,6 +3401,7 @@ class BattleGround:
             self.discards[request.player].append(source)
         source.zone = Zone.DISCARD
         option.action()
+        self.emit_use_after(request.player, source)
         return True
 
     def cancel_choose(self) -> bool:
@@ -3554,6 +3566,7 @@ class BattleGround:
         card.zone = Zone.DISCARD
         if card not in self.discards[player]:
             self.discards[player].append(card)
+        self.emit_use_after(player, card)
         self.check_victory()
         return True
 
@@ -3958,6 +3971,23 @@ class BattleGround:
                 self.kredits[player].slots,
             )
 
+    def emit_use_after(self, player: Player, card: Card) -> None:
+        """广播指令效果结算完成事件。
+
+        Args:
+            player: 使用者
+            card: 已结算的指令
+        """
+        self.emit(
+            Event(
+                EventType.USE_AFTER,
+                card=card,
+                source=card,
+                player=player,
+                targets=list(self.targets),
+            )
+        )
+
     def finish_order(self, player: Player, card: Card) -> None:
         """
         指向型指令结算完成, 从手牌进入弃牌堆
@@ -3970,6 +4000,7 @@ class BattleGround:
             self.hands[player].remove(card)
         self.discards[player].append(card)
         card.zone = Zone.DISCARD
+        self.emit_use_after(player, card)
         self.check_victory()
 
     def cancel_order(self, player: Player, card: Card, cost: int) -> None:
