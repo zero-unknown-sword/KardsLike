@@ -39,8 +39,10 @@
             <iframe id="forge-frame" title="KARDS DIY" src="/forge/"></iframe>
           </div>
           <div class="kl-pane">
-            <div class="pane-label">KL 流程</div>
-            <textarea id="kl-code" spellcheck="false">IMPORT
+            <div class="pane-label">KL 流程 <span id="kl-status" class="kl-status">就绪</span></div>
+            <div class="kl-editor-wrap">
+              <pre id="kl-highlight" class="kl-highlight" aria-hidden="true"></pre>
+              <textarea id="kl-code" spellcheck="false">IMPORT
     kards
 DEPENDENCIES
     kards

@@ -91,6 +91,18 @@ COUNTRY_ALIASES = {
     "anzac": "anzac",
     "neutral": "neutral",
 }
+SECTION_ORDER = {
+    "IMPORT": 0,
+    "IMPORTS": 0,
+    "DEPEND": 1,
+    "DEPENDS": 1,
+    "DEPENDENCY": 1,
+    "DEPENDENCIES": 1,
+    "REQUIRE": 1,
+    "REQUIRES": 1,
+    "SET_UNIT": 2,
+    "SET_PROCEDURES": 3,
+}
 RARITY_ALIASES = {
     "普通": "standard",
     "标准": "standard",
@@ -310,11 +322,19 @@ def parse_declarations(source: str) -> list[dict[str, Any]]:
     fields: dict[str, Any] = {}
     procedures = ""
     index = 0
+    last_order = -1
     while index < len(lines):
         section = _section_name(lines[index])
         if section is None:
             index += 1
             continue
+        order = SECTION_ORDER.get(section, -1)
+        if order < last_order:
+            raise KLError(
+                "段顺序错误：必须按 IMPORT -> DEPENDENCIES -> "
+                "SET_UNIT -> SET_PROCEDURES 排列"
+            )
+        last_order = order
         if section in {"IMPORT", "IMPORTS"}:
             values, index = _collect_section(lines, index + 1)
             imports.extend(_strip_commas(value) for value in values if _strip_commas(value))

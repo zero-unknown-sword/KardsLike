@@ -2,6 +2,8 @@ const statusEl = document.getElementById("status");
 const fileList = document.getElementById("files");
 const filter = document.getElementById("filter");
 const klCode = document.getElementById("kl-code");
+const klHighlight = document.getElementById("kl-highlight");
+const klStatus = document.getElementById("kl-status");
 const cardCode = document.getElementById("card-code");
 const fileView = document.getElementById("file-view");
 const forgeFrame = document.getElementById("forge-frame");
@@ -85,6 +87,101 @@ async function openFile(path) {
   }
 }
 
+
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function highlightKl(source) {
+  let html = escapeHtml(source);
+  html = html.replace(
+    /^(\s*)(IMPORT|IMPORTS|DEPEND|DEPENDS|DEPENDENCY|DEPENDENCIES|REQUIRE|REQUIRES|SET_UNIT|SET_PROCEDURES)(\s*:?\s*)$/gm,
+    '$1<span class="kl-section">$2</span>$3',
+  );
+  html = html.replace(
+    /^(\s*)([A-Za-z_][A-Za-z0-9_\/]*)(\s*:)/gm,
+    '$1<span class="kl-key">$2</span>$3',
+  );
+  html = html.replace(/(&quot;.*?&quot;)/g, '<span class="kl-string">$1</span>');
+  html = html.replace(/\b(\d+)\b/g, '<span class="kl-number">$1</span>');
+  html = html.replace(/^(\s*)(#.*)$/gm, '$1<span class="kl-comment">$2</span>');
+  return html;
+}
+
+function updateHighlight() {
+  klHighlight.innerHTML = highlightKl(klCode.value);
+  klHighlight.scrollTop = klCode.scrollTop;
+  klHighlight.scrollLeft = klCode.scrollLeft;
+}
+
+function setKlStatus(text, kind = "") {
+  klStatus.textContent = text;
+  klStatus.className = `kl-status ${kind}`.trim();
+}
+
+let klCheckTimer = 0;
+function scheduleKlCheck() {
+  window.clearTimeout(klCheckTimer);
+  klCheckTimer = window.setTimeout(async () => {
+    try {
+      const response = await fetch("/api/kl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: klCode.value }),
+      });
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setKlStatus("语法通过", "ok");
+      } else {
+        setKlStatus(data.error || "语法错误", "error");
+      }
+    } catch (error) {
+      setKlStatus("无法连接解析器", "error");
+    }
+  }, 450);
+}
+
+function insertText(text) {
+  const start = klCode.selectionStart;
+  const end = klCode.selectionEnd;
+  klCode.setRangeText(text, start, end, "end");
+  updateHighlight();
+  scheduleKlCheck();
+}
+
+function handleKlKeydown(event) {
+  if (event.key === "Tab") {
+    event.preventDefault();
+    insertText("    ");
+    return;
+  }
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  const position = klCode.selectionStart;
+  const before = klCode.value.slice(0, position);
+  const lineStart = before.lastIndexOf("\n") + 1;
+  const currentLine = before.slice(lineStart);
+  const indentMatch = currentLine.match(/^\s*/);
+  let indent = indentMatch ? indentMatch[0] : "";
+  if (/^\s*(IMPORT|IMPORTS|DEPEND|DEPENDS|DEPENDENCY|DEPENDENCIES|REQUIRE|REQUIRES|SET_UNIT|SET_PROCEDURES)\s*$/.test(currentLine)) {
+    indent += "    ";
+  } else if (/[\{\[]\s*$/.test(currentLine)) {
+    indent += "    ";
+  }
+  insertText(`\n${indent}`);
+}
+
+klCode.addEventListener("input", () => {
+  updateHighlight();
+  scheduleKlCheck();
+});
+klCode.addEventListener("scroll", updateHighlight);
+klCode.addEventListener("keydown", handleKlKeydown);
+
 const TYPE_INDEX = {
   infantry: 1, tank: 2, artillery: 3, fighter: 4, bomber: 5, order: 6, countermeasure: 7,
 };
@@ -156,6 +253,7 @@ async function parseCard() {
   });
   cardCode.textContent = generated.python;
   targetEl.textContent = generated.target;
+  setKlStatus("语法通过", "ok");
   setStatus("KL 解析完成");
   return card;
 }
@@ -256,7 +354,10 @@ async function saveCard(writePy) {
 }
 
 document.getElementById("parse-card").addEventListener("click", () => {
-  parseCard().catch((error) => setStatus(`解析失败: ${error}`));
+  parseCard().catch((error) => {
+    setKlStatus(String(error), "error");
+    setStatus(`解析失败: ${error}`);
+  });
 });
 document.getElementById("sync-card").addEventListener("click", syncForge);
 document.getElementById("pull-card").addEventListener("click", pullFromForge);
@@ -264,6 +365,7 @@ document.getElementById("save-card").addEventListener("click", () => saveCard(fa
 document.getElementById("write-card").addEventListener("click", () => saveCard(true));
 filter.addEventListener("input", renderFiles);
 
+updateHighlight();
 loadFiles()
   .then(() => setStatus("就绪"))
   .catch((error) => setStatus(String(error)));
