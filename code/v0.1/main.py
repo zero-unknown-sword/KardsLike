@@ -2239,9 +2239,17 @@ class BattleGround:
         """对局开始发牌, 先手 4 张后手 5 张"""
         second = self.first_player.opponent
         for _ in range(4):
-            self.draw(self.first_player, self.special_source(self.first_player))
+            self.draw(
+                self.first_player,
+                self.special_source(self.first_player),
+                count_as_draw=False,
+            )
         for _ in range(5):
-            self.draw(second, self.special_source(second))
+            self.draw(
+                second,
+                self.special_source(second),
+                count_as_draw=False,
+            )
 
     def special_source(self, player: Player) -> Card:
         """
@@ -2257,7 +2265,12 @@ class BattleGround:
         hq.add_tag(CardTag.SPECIAL_SOURCE)
         return hq
 
-    def draw(self, player: Player, source: Card) -> Card | None:
+    def draw(
+        self,
+        player: Player,
+        source: Card,
+        count_as_draw: bool = True,
+    ) -> Card | None:
         """
         为玩家抽一张牌, 手牌满 9 张时弃掉抽到的牌
 
@@ -2266,6 +2279,7 @@ class BattleGround:
         Args:
             player: 玩家
             source: 抽牌来源, 回合开始时为带 SPECIAL_SOURCE 标签的总部
+            count_as_draw: 是否广播 DRAW 事件, 初始手牌为 False
 
         Returns:
             抽到的卡牌, 卡组为空时为 None
@@ -2279,7 +2293,8 @@ class BattleGround:
             self.auto_use_card(card, player)
         else:
             self.discard_card(player, card)
-        self.emit(Event(EventType.DRAW, card=card, player=player, source=source))
+        if count_as_draw:
+            self.emit(Event(EventType.DRAW, card=card, player=player, source=source))
         return card
 
     def apply_intel(self, player: Player, card: Card) -> None:
@@ -4097,11 +4112,12 @@ class BattleGround:
         card.base_tags.clear()
         card.keyword_values.clear()
         card.effect = None
+        # 先移除光环, 否则 clear_auras 会从重置后的基础攻击力再扣一次
+        card.clear_auras()
         card.at = card.initial_at
         card.max_df = card.initial_df
         card.df = min(card.df, card.max_df)
         card.operation_cost = card.initial_operation_cost
-        card.clear_auras()
 
     def retreat_unit(self, card: Card, source: Card) -> None:
         """

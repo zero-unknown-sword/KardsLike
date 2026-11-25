@@ -3,6 +3,10 @@
   "main": "Soviet",
   "ally": "Britain",
   "cards": [
+    "kards:card_shibata_regiment",
+    "kards:card_shibata_regiment",
+    "kards:card_169_grenadiers",
+    "kards:card_169_grenadiers",
     "kards:card_3rd_morskoi_pekhoty",
     "kards:card_3rd_morskoi_pekhoty",
     "kards:card_2nd_west_africa",
