@@ -8015,9 +8015,13 @@ class CardBrowser:
         self.art_cache: dict[str, Surface | None] = {}
         self.flag_cache: dict[Country, Surface | None] = {}
         self.deck_back_image: Surface = loader.load(assets / "cards" / "card_back.png")
-        self.tab_deck = pygame.Rect(24, 20, 150, 48)
-        self.tab_collection = pygame.Rect(184, 20, 150, 48)
-        self.back_rect = pygame.Rect(0, 20, 110, 48)
+        self.tab_deck = pygame.Rect(160, 18, 140, 42)
+        self.tab_collection = pygame.Rect(310, 18, 140, 42)
+        self.back_rect = pygame.Rect(0, 18, 100, 42)
+        self.selected_deck: int = 0
+        self.side_start = pygame.Rect(18, 130, 118, 92)
+        self.side_cards = pygame.Rect(18, 238, 118, 92)
+        self.side_shop = pygame.Rect(18, 346, 118, 92)
         self.collection: list[Card] | None = None
         self.art_index: dict[str, Any] = {}
         index_path = assets.parent / "data" / "art_index.json"
@@ -8077,59 +8081,151 @@ class CardBrowser:
         self.flag_cache[country] = image
         return image
 
+    def _draw_sidebar(self, screen: Surface, mouse: tuple[int, int]) -> None:
+        """绘制左侧主导航。"""
+        for rect, label in (
+            (self.side_start, "开始"),
+            (self.side_cards, "卡牌"),
+            (self.side_shop, "商店"),
+        ):
+            active = label == "卡牌"
+            color = (70, 78, 65) if active else (40, 45, 40)
+            if rect.collidepoint(mouse) and not active:
+                color = (58, 65, 56)
+            pygame.draw.rect(screen, color, rect, border_radius=6)
+            pygame.draw.rect(screen, (165, 155, 120), rect, 1, border_radius=6)
+            self._center_text(screen, label, rect.center, (230, 225, 200), self.font)
+
+    def _draw_deck_tile(
+        self,
+        screen: Surface,
+        deck: Deck,
+        rect: pygame.Rect,
+        selected: bool,
+        hover: bool,
+    ) -> None:
+        """绘制单个卡组卡片。"""
+        pygame.draw.rect(
+            screen,
+            (67, 74, 61) if hover else (47, 53, 46),
+            rect,
+            border_radius=8,
+        )
+        pygame.draw.rect(
+            screen,
+            (245, 205, 110) if selected else (170, 160, 125),
+            rect,
+            3 if selected else 1,
+            border_radius=8,
+        )
+        back_w = min(126, rect.width - 24)
+        back_h = int(back_w * 702 / 500)
+        back = pygame.transform.smoothscale(self.deck_back_image, (back_w, back_h))
+        back_rect = back.get_rect(midtop=(rect.centerx, rect.y + 16))
+        screen.blit(back, back_rect)
+
+        name = self.small.render(deck.name or "未命名卡组", True, (240, 230, 195))
+        name_rect = name.get_rect(center=(rect.centerx, back_rect.bottom + 20))
+        pygame.draw.rect(screen, (34, 39, 34), name_rect.inflate(16, 8))
+        screen.blit(name, name_rect)
+
+        icons: list[Surface] = []
+        for country in (deck.main_country, deck.ally_country):
+            icon = self._flag_icon(country)
+            if icon is not None:
+                icons.append(pygame.transform.smoothscale(icon, (26, 26)))
+        total = len(icons) * 26 + max(0, len(icons) - 1) * 6
+        icon_x = rect.centerx - total // 2
+        icon_y = name_rect.bottom + 10
+        for icon in icons:
+            screen.blit(icon, (icon_x, icon_y))
+            icon_x += 32
+
+    def _draw_deck_detail(self, screen: Surface, deck: Deck) -> None:
+        """绘制右侧卡组详情栏。"""
+        x = screen.get_width() - 350
+        y = 82
+        width = 326
+        height = screen.get_height() - 102
+        panel = pygame.Rect(x, y, width, height)
+        pygame.draw.rect(screen, (31, 36, 32), panel, border_radius=8)
+        pygame.draw.rect(screen, (100, 95, 74), panel, 1, border_radius=8)
+
+        title = self.font.render(deck.name or "未命名卡组", True, (240, 230, 195))
+        screen.blit(title, title.get_rect(center=(panel.centerx, y + 34)))
+
+        back_w = 190
+        back_h = int(back_w * 702 / 500)
+        back = pygame.transform.smoothscale(self.deck_back_image, (back_w, back_h))
+        back_rect = back.get_rect(midtop=(panel.centerx, y + 70))
+        screen.blit(back, back_rect)
+
+        slots = [
+            ("卡背", self.deck_back_image),
+            ("桌饰", None),
+            ("总部", None),
+            ("表情", None),
+        ]
+        slot_y = back_rect.bottom + 18
+        slot_w = 70
+        for index, (label, image) in enumerate(slots):
+            slot = pygame.Rect(x + 12 + index * 76, slot_y, slot_w, 70)
+            if image is not None:
+                thumb = pygame.transform.smoothscale(image, (slot_w, slot_w))
+                screen.blit(thumb, (slot.x, slot.y))
+            else:
+                pygame.draw.rect(screen, (48, 53, 45), slot, border_radius=4)
+            self._center_text(
+                screen,
+                label,
+                (slot.centerx, slot.bottom + 12),
+                (185, 180, 155),
+                self.small,
+            )
+
+        button_y = panel.bottom - 120
+        for index, label in enumerate(("删除", "复制", "收藏")):
+            button = pygame.Rect(x + 18 + index * 96, button_y, 82, 38)
+            pygame.draw.rect(screen, (55, 62, 52), button, border_radius=5)
+            pygame.draw.rect(screen, (145, 135, 105), button, 1, border_radius=5)
+            self._center_text(screen, label, button.center, (220, 215, 190), self.small)
+        edit = pygame.Rect(x + 18, button_y + 48, width - 36, 42)
+        pygame.draw.rect(screen, (95, 105, 82), edit, border_radius=5)
+        pygame.draw.rect(screen, (205, 190, 140), edit, 1, border_radius=5)
+        self._center_text(screen, "编辑", edit.center, (245, 240, 210), self.font)
+
     def _draw_decks(self, screen: Surface, mouse: tuple[int, int]) -> None:
-        """按矩阵绘制卡组: 卡背在上, 名称和主盟国图标在下。"""
-        margin = 40
-        gap = 24
+        """按矩阵绘制卡组, 右侧显示当前卡组详情。"""
+        left = 160
+        right = screen.get_width() - 370
+        margin = 16
+        gap = 16
         cols = 4
-        width = (screen.get_width() - margin * 2 - gap * (cols - 1)) // cols
-        height = 330
-        top = 125
+        width = max(120, (right - left - margin * 2 - gap * (cols - 1)) // cols)
+        top = 96
+        row_h = 284
         self.card_rects = []
         for index, deck in enumerate(self.decks):
             row, col = divmod(index, cols)
             rect = pygame.Rect(
-                margin + col * (width + gap),
-                top + row * (height + gap),
+                left + margin + col * (width + gap),
+                top + row * (row_h + gap),
                 width,
-                height,
+                row_h,
             )
-            hover = rect.collidepoint(mouse)
-            pygame.draw.rect(
+            self._draw_deck_tile(
                 screen,
-                (62, 70, 58) if hover else (48, 55, 47),
+                deck,
                 rect,
-                border_radius=10,
+                index == self.selected_deck,
+                rect.collidepoint(mouse),
             )
-            pygame.draw.rect(screen, (205, 190, 140), rect, 2, border_radius=10)
-
-            back_w = min(132, width - 48)
-            back_h = int(back_w * 702 / 500)
-            back = pygame.transform.smoothscale(self.deck_back_image, (back_w, back_h))
-            back_rect = back.get_rect(midtop=(rect.centerx, rect.y + 18))
-            screen.blit(back, back_rect)
-
-            title = self.font.render(deck.name or "未命名卡组", True, (240, 230, 195))
-            screen.blit(title, title.get_rect(center=(rect.centerx, back_rect.bottom + 30)))
-
-            icons: list[Surface] = []
-            for country in (deck.main_country, deck.ally_country):
-                icon = self._flag_icon(country)
-                if icon is not None:
-                    icons.append(pygame.transform.smoothscale(icon, (30, 30)))
-            icon_total = len(icons) * 30 + max(0, len(icons) - 1) * 8
-            icon_x = rect.centerx - icon_total // 2
-            icon_y = back_rect.bottom + 54
-            for icon in icons:
-                screen.blit(icon, (icon_x, icon_y))
-                icon_x += 38
-
-            count = self.small.render(f"{len(deck.cards)} 张", True, (175, 170, 145))
-            screen.blit(count, count.get_rect(center=(rect.centerx, icon_y + 46)))
             self.card_rects.append((rect, deck.hq))
+        if self.decks:
+            self._draw_deck_detail(screen, self.decks[self.selected_deck])
 
     def _layout(self, screen: Surface, count: int) -> tuple[int, int, int, int, int]:
-        margin = 24
+        margin = 160
         gap = 10
         cols = 8
         top = 140
@@ -8141,6 +8237,7 @@ class CardBrowser:
     def draw(self, screen: Surface) -> None:
         screen.fill((18, 22, 20))
         mouse = pygame.mouse.get_pos()
+        self._draw_sidebar(screen, mouse)
         for rect, label, mode in (
             (self.tab_deck, "卡组", "deck"),
             (self.tab_collection, "收藏", "collection"),
@@ -8233,8 +8330,9 @@ class CardBrowser:
             elif self.back_rect.collidepoint(event.pos):
                 Global.status.scene = SCENE_MENU
             elif self.mode == "deck":
-                for rect, _ in self.card_rects:
+                for index, (rect, _) in enumerate(self.card_rects):
                     if rect.collidepoint(event.pos):
+                        self.selected_deck = index
                         break
         elif event.type == pygame.MOUSEWHEEL:
             self.scroll += -1 if event.y > 0 else 1
