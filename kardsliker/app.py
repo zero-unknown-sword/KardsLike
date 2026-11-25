@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 from http.server import ThreadingHTTPServer
+
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox --no-proxy-server --disable-gpu"
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QColor
