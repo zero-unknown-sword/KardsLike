@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>KardsLiker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">KardsLiker <span>mod editor</span></div>
+    <nav class="tabs">
+      <button data-tab="project" class="active">项目</button>
+      <button data-tab="python">Python</button>
+      <button data-tab="kl">KL</button>
+      <button data-tab="forge">卡面</button>
+    </nav>
+    <div class="status" id="status">就绪</div>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <div class="sidebar-title">项目文件</div>
+      <input id="filter" placeholder="筛选文件..." autocomplete="off">
+      <div id="files" class="file-list"></div>
+    </aside>
+
+    <section id="panel-project" class="panel active">
+      <h2>KardsLiker</h2>
+      <p>本地 KARDS mod 编辑器的骨架。</p>
+      <div class="cards">
+        <article><h3>Python IDE</h3><p>浏览 mod 文件，编辑并运行 Python。</p></article>
+        <article><h3>KL 语言</h3><p>声明式卡牌 DSL，当前支持 card 块。</p></article>
+        <article><h3>DIY 卡面</h3><p>原版 KARDS DIY 生成器，嵌入本地页面。</p></article>
+      </div>
+      <pre id="output" class="console"></pre>
+    </section>
+
+    <section id="panel-python" class="panel">
+      <div class="editor-head">
+        <span id="current-file">未选择文件</span>
+        <div>
+          <button id="save">保存</button>
+          <button id="run">运行</button>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="code" spellcheck="false" placeholder="从左侧选择一个 .py 文件"></textarea>
+      </div>
+      <pre id="run-output" class="console"></pre>
+    </section>
+
+    <section id="panel-kl" class="panel">
+      <div class="editor-head">
+        <span>KL 语法检查</span>
+        <div><button id="parse-kl">解析</button></div>
+      </div>
+      <textarea id="kl-code" class="kl-editor" spellcheck="false">card "card_example" {
+    type: infantry
+    cost: 1
+    at: 2
+    df: 3
+    text: "部署：抽 1 张牌。"
+}</textarea>
+      <pre id="kl-output" class="console"></pre>
+    </section>
+
+    <section id="panel-forge" class="panel forge-panel">
+      <iframe id="forge-frame" title="KARDS DIY" src="/forge/"></iframe>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
