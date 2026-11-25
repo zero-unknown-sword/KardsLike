@@ -5083,7 +5083,7 @@ _HQ_CODES: dict[Country, str] = {
     Country.SOVIET: "8v",
     Country.USA: "ce",
 }
-_DECK_CODE_TABLE: dict[str, str] | None = None
+_deck_code_table_cache: dict[str, str] | None = None
 
 
 def _official_stem(value: str) -> str:
@@ -5098,9 +5098,9 @@ def _official_stem(value: str) -> str:
 
 def _deck_code_table() -> dict[str, str]:
     """加载官方卡组代码到资产名映射。"""
-    global _DECK_CODE_TABLE
-    if _DECK_CODE_TABLE is not None:
-        return _DECK_CODE_TABLE
+    global _deck_code_table_cache
+    if _deck_code_table_cache is not None:
+        return _deck_code_table_cache
     table: dict[str, str] = {}
     if DECK_CODE_FILE.is_file():
         try:
@@ -5120,7 +5120,7 @@ def _deck_code_table() -> dict[str, str]:
                 for item in _object_list(value):
                     if isinstance(item, str):
                         table.setdefault(_official_stem(item), code)
-    _DECK_CODE_TABLE = table
+    _deck_code_table_cache = table
     return table
 
 
@@ -8079,6 +8079,889 @@ class BattleUI:
             screen.blit(rotated, rect)
         self.deck_add_anims = alive
 
+    def _draw_decks(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制双方牌堆, 斜放的卡背加剩余数量
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        back = pygame.transform.rotate(self.deck_back, -14)
+        width, height = self.screen_size
+        positions = (
+            (Player.B, self.margin, int(height * 0.012), "对手卡组"),
+            (
+                Player.A,
+                width - self.margin - back.get_width(),
+                self.status_y - back.get_height() - int(height * 0.010),
+                "我方卡组",
+            ),
+        )
+        for player, x, y, label in positions:
+            now = pygame.time.get_ticks()
+            start = self.shuffle_anims.get(player)
+            if start is not None:
+                elapsed = now - start
+                if elapsed >= 1500:
+                    self.shuffle_anims.pop(player, None)
+                    start = None
+                else:
+                    self._draw_shuffle_pile(screen, x, y, elapsed, player)
+            if start is None:
+                screen.blit(back, (x, y))
+            if player is Player.A:
+                self.deck_rect = pygame.Rect(x, y, back.get_width(), back.get_height())
+            else:
+                self.deck_rect_b = pygame.Rect(x, y, back.get_width(), back.get_height())
+            count = len(ground.decks[player].cards)
+            label_y = y - 24 if player is Player.A else y + back.get_height() + 2
+            self._text(screen, f"{label} {count}", (x, label_y), (215, 215, 215))
+
+    def _draw_shuffle_pile(
+        self,
+        screen: Surface,
+        x: int,
+        y: int,
+        elapsed: int,
+        player: Player,
+    ) -> None:
+        """
+        绘制俯视角切牌洗切动画
+
+        Args:
+            screen: 屏幕 Surface
+            x: 牌堆横坐标
+            y: 牌堆纵坐标
+            elapsed: 已进行时间
+            player: 牌堆所有者
+        """
+        duration = 1500
+        progress = elapsed / duration
+        cycle = elapsed % 450
+        spread = math.sin((cycle / 450) * math.pi)
+        fade = max(0.0, 1 - max(0.0, (progress - 0.85) / 0.15))
+        for index in range(6):
+            pile = -1 if index < 3 else 1
+            level = index % 3
+            offset_x = int(pile * 18 * spread)
+            offset_y = int(pile * 70 * spread + level * 11 - (8 if pile < 0 else 0))
+            angle = -14 + pile * 10 * spread + (level - 1) * 3
+            image = pygame.transform.rotate(self.deck_back, angle)
+            image.set_alpha(int(255 * fade))
+            screen.blit(image, (x + offset_x, y + offset_y))
+
+    def _draw_return_anims(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制单位回手动画: 先在原位置短暂停留, 再飞向手牌
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if not self.return_anims:
+            return
+        now = pygame.time.get_ticks()
+        duration = 520
+        alive: list[tuple[Card, pygame.Rect, int]] = []
+        hand_a = self.hand_rects(screen, len(ground.hands[Player.A].cards))
+        target_a = hand_a[-1].center if hand_a else (screen.get_width() // 2, self.own_hand_y + self.card_h // 2)
+        target_b = (screen.get_width() // 2, self.opp_hand_y + self.opp_hand_h // 2)
+        for card, old_rect, start in self.return_anims:
+            if now < start:
+                alive.append((card, old_rect, start))
+                continue
+            progress = (now - start) / duration
+            if progress >= 1:
+                continue
+            alive.append((card, old_rect, start))
+            ease = 1 - (1 - progress) ** 3
+            target = target_a if card.controller is Player.A else target_b
+            x = int(old_rect.centerx + (target[0] - old_rect.centerx) * ease)
+            y = int(old_rect.centery + (target[1] - old_rect.centery) * ease)
+            y -= int(22 * math.sin(math.pi * progress))
+            art = self._card_art(card)
+            image = (art if art is not None else self.face).copy()
+            image.set_alpha(int(255 * (1 - progress * 0.35)))
+            screen.blit(image, image.get_rect(center=(x, y)))
+        self.return_anims = alive
+
+    def _draw_draw_anims(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制抽牌时从牌堆飞向手牌的卡背
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if not self.draw_anims:
+            return
+        now = pygame.time.get_ticks()
+        duration = 320
+        hand_rects = self.hand_rects(screen, len(ground.hands[Player.A].cards))
+        if hand_rects:
+            target_a = hand_rects[-1].center
+        else:
+            target_a = (screen.get_width() // 2, self.own_hand_y + self.card_h // 2)
+        target_b = (screen.get_width() // 2, self.opp_hand_y + self.opp_hand_h // 2)
+        alive: list[tuple[Player, int]] = []
+        for player, start in self.draw_anims:
+            if now < start:
+                alive.append((player, start))
+                continue
+            progress = (now - start) / duration
+            if progress >= 1:
+                continue
+            alive.append((player, start))
+            if player is Player.A:
+                source = self.deck_rect.center if self.deck_rect is not None else None
+                target = target_a
+            else:
+                source = self.deck_rect_b.center if self.deck_rect_b is not None else None
+                target = target_b
+            if source is None:
+                continue
+            x = int(source[0] + (target[0] - source[0]) * progress)
+            y = int(source[1] + (target[1] - source[1]) * progress)
+            ghost = self.deck_back.copy()
+            ghost.set_alpha(int(255 * (1 - progress * 0.6)))
+            screen.blit(ghost, ghost.get_rect(center=(x, y)))
+        self.draw_anims = alive
+
+    def _draw_discard_anims(self, screen: Surface) -> None:
+        """
+        绘制弃牌特效: 升空停顿后向右倾斜飞出
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        self._draw_fly_cards(screen, self.discard_anims, 1000, 120, 1, -35)
+
+    def _draw_remove_anims(self, screen: Surface) -> None:
+        """
+        绘制移除特效: 升空较低, 停顿后向左倾斜飞出
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        self._draw_fly_cards(screen, self.remove_anims, 900, 80, -1, 35)
+
+    def _draw_move_anims(self, screen: Surface) -> None:
+        """
+        绘制单位非线性移动动画
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if not self.move_anims:
+            return
+        now = pygame.time.get_ticks()
+        duration = 420
+        alive: dict[int, tuple[Card, pygame.Rect, int]] = {}
+        for key, (card, old_rect, start) in self.move_anims.items():
+            record = self.frame_rects.get(key)
+            if record is None or card.line is None:
+                continue
+            if now < start:
+                alive[key] = (card, old_rect, start)
+                continue
+            elapsed = now - start
+            if elapsed >= duration:
+                continue
+            alive[key] = (card, old_rect, start)
+            progress = elapsed / duration
+            ease = 1 - (1 - progress) ** 3
+            new_rect = record[1]
+            x = old_rect.centerx + (new_rect.centerx - old_rect.centerx) * ease
+            y = old_rect.centery + (new_rect.centery - old_rect.centery) * ease
+            y -= int(30 * math.sin(math.pi * progress))
+            art = self._card_art(card)
+            image = art if art is not None else self.face
+            rect = image.get_rect(center=(int(x), int(y)))
+            screen.blit(image, rect)
+        self.move_anims = alive
+
+    def _draw_slam_anims(self, screen: Surface) -> None:
+        """
+        绘制大拍桌: 卡牌升空停留后重砸落下
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if not self.slam_anims:
+            return
+        now = pygame.time.get_ticks()
+        total = 1050
+        impact = 800
+        for key, (card, rect, start) in list(self.slam_anims.items()):
+            if card.line is None:
+                self.slam_anims.pop(key, None)
+                self.slam_impacted.discard(key)
+                continue
+            if rect is None:
+                record = self.frame_rects.get(key)
+                if record is None:
+                    continue
+                rect = record[1]
+                self.slam_anims[key] = (card, rect, start)
+            elapsed = now - start
+            if elapsed >= total:
+                self.slam_anims.pop(key, None)
+                self.slam_impacted.discard(key)
+                continue
+            if elapsed < 180:
+                scale = 0.8 + 0.3 * (elapsed / 180)
+            elif elapsed < 500:
+                scale = 1.1 - 0.1 * ((elapsed - 180) / 320)
+            else:
+                scale = 1.0
+            if card.line.kind is LineKind.FRONT:
+                line_y = self.front_y
+            else:
+                line_y = self.own_line_y if card.controller is Player.A else self.opp_line_y
+            hover_y = line_y - int(self.card_h * 0.80)
+            hover_offset = hover_y - rect.y
+            if elapsed < 180:
+                offset = hover_offset
+            elif elapsed < 500:
+                offset = hover_offset + int(8 * math.sin((elapsed - 180) / 45))
+            elif elapsed < impact:
+                t = (elapsed - 500) / (impact - 500)
+                offset = int(hover_offset * (1 - t**3))
+            else:
+                offset = 0
+            shadow_alpha = int(180 * (1 - min(1.0, abs(offset) / max(1, abs(hover_offset)))))
+            shadow = pygame.Surface((rect.width, max(8, rect.height // 6)), pygame.SRCALPHA)
+            pygame.draw.ellipse(shadow, (0, 0, 0, shadow_alpha), shadow.get_rect())
+            screen.blit(shadow, shadow.get_rect(center=(rect.centerx, rect.bottom + 6)))
+            art = self._card_art(card)
+            image = art if art is not None else self.face
+            width = max(1, int(rect.width * scale))
+            height = max(1, int(rect.height * scale))
+            scaled = pygame.transform.smoothscale(image, (width, height))
+            center = (rect.centerx, rect.centery + offset)
+            screen.blit(scaled, scaled.get_rect(center=center))
+            border = pygame.Rect(0, 0, width, height)
+            border.center = center
+            pygame.draw.rect(screen, (235, 235, 235), border, 2, border_radius=4)
+            if elapsed >= impact and key not in self.slam_impacted:
+                self.slam_impacted.add(key)
+                self.shake_until = now + 1200
+                self.shake_strength = max(20, int(self.card_h * 0.22))
+                self.slam_waves.append((rect.copy(), now))
+
+    def _draw_slam_waves(self, screen: Surface) -> None:
+        """
+        绘制大拍桌落地时的冲击波
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if not self.slam_waves:
+            return
+        now = pygame.time.get_ticks()
+        alive: list[tuple[pygame.Rect, int]] = []
+        for rect, start in self.slam_waves:
+            progress = (now - start) / 320
+            if progress >= 1:
+                continue
+            alive.append((rect, start))
+            width = max(24, int(rect.width * (1 + progress * 1.2)))
+            height = max(8, int(width * 0.24))
+            wave = pygame.Surface((width, height), pygame.SRCALPHA)
+            pygame.draw.ellipse(
+                wave,
+                (255, 220, 150, int(150 * (1 - progress))),
+                (0, 0, width, height),
+                3,
+            )
+            screen.blit(wave, wave.get_rect(center=(rect.centerx, rect.bottom - 4)))
+        self.slam_waves = alive
+
+    def _draw_fly_cards(
+        self,
+        screen: Surface,
+        anims: list[tuple[Card, pygame.Rect, int]],
+        duration: int,
+        rise: int,
+        direction: int,
+        angle_max: float,
+    ) -> None:
+        """
+        绘制卡牌起飞、停顿、倾斜飞出的动画
+
+        Args:
+            screen: 屏幕 Surface
+            anims: (卡牌, 起始矩形, 开始时间) 列表
+            duration: 总时长
+            rise: 上升高度
+            direction: 飞出方向, 1 向右, -1 向左
+            angle_max: 最终倾斜角度
+        """
+        if not anims:
+            return
+        now = pygame.time.get_ticks()
+        alive: list[tuple[Card, pygame.Rect, int]] = []
+        for card, rect, start in anims:
+            if now < start:
+                alive.append((card, rect, start))
+                continue
+            elapsed = now - start
+            if elapsed > duration:
+                continue
+            alive.append((card, rect, start))
+            art = self._card_art(card)
+            image = (art if art is not None else self.face).copy()
+            progress = elapsed / duration
+            if progress < 0.3:
+                t = progress / 0.3
+                lift = int(rise * (1 - (1 - t) ** 2))
+                x, y = rect.centerx, rect.centery - lift
+                angle = 0.0
+                alpha = 255
+            elif progress < 0.5:
+                x, y = rect.centerx, rect.centery - rise
+                angle = 0.0
+                alpha = 255
+            else:
+                t = (progress - 0.5) / 0.5
+                x = rect.centerx + direction * int(t * t * screen.get_width() * 0.9)
+                y = rect.centery - rise + int(t * 60)
+                angle = angle_max * t
+                alpha = int(255 * (1 - t))
+            rotated = pygame.transform.rotate(image, angle)
+            rotated.set_alpha(max(0, alpha))
+            screen.blit(rotated, rotated.get_rect(center=(int(x), int(y))))
+        anims[:] = alive
+
+    def _start_drag(self, card: Card, from_hand: bool, origin: pygame.Rect, pos: tuple[int, int]) -> None:
+        """
+        开始拖拽
+
+        Args:
+            card: 被拖拽的卡牌
+            from_hand: 是否来自手牌
+            origin: 起始矩形
+            pos: 鼠标位置
+        """
+        self.drag_card = card
+        self.drag_from_hand = from_hand
+        self.drag_origin = origin.copy()
+        self.drag_pos = pos
+        self.selected_hand = None
+        self.selected_unit = None
+        self.message = ""
+
+    def _line_area(self, screen: Surface, y: int) -> pygame.Rect:
+        """
+        返回一条战线可放置卡牌的区域, 按最大卡位数取范围
+
+        Args:
+            screen: 屏幕 Surface
+            y: 战线纵坐标
+
+        Returns:
+            区域矩形
+        """
+        rects = self.line_rects(screen, self.MAX_SLOTS, y)
+        area = rects[0].copy()
+        for rect in rects[1:]:
+            area.union_ip(rect)
+        return area
+
+    def _drop_index(self, screen: Surface, pos: tuple[int, int], line: Line) -> int:
+        """
+        根据鼠标横坐标计算插入位置
+
+        Args:
+            screen: 屏幕 Surface
+            pos: 鼠标位置
+            line: 目标战线
+
+        Returns:
+            插入位置, 0 到当前卡位数(含总部)
+        """
+        count = len(self._sequence(line)) + 1
+        rects = self.line_rects(screen, count, 0)
+        centers = [rect.centerx for rect in rects]
+        return min(range(count), key=lambda i: abs(centers[i] - pos[0]))
+
+    def _preview_target(self, screen: Surface, ground: BattleGround) -> tuple[Line | None, int | None]:
+        """
+        计算当前拖拽的预览目标
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+
+        Returns:
+            (目标战线, 插入位置), 无有效目标时为 (None, None)
+        """
+        if self.drag_card is None or self.drag_pos is None or ground.winner is not None:
+            return None, None
+        if ground.turn_owner is not Player.A:
+            return None, None
+        pos = self.drag_pos
+        support = ground.support_lines[Player.A]
+        front = ground.front_line
+        support_area = self._line_area(screen, self.own_line_y)
+        front_area = self._line_area(screen, self.front_y)
+        if self.drag_from_hand:
+            if self.drag_card.is_unit and support_area.collidepoint(pos):
+                if len(support.units) < support.capacity:
+                    return support, self._drop_index(screen, pos, support)
+            return None, None
+        if self.drag_card.line is support:
+            if (
+                front_area.collidepoint(pos)
+                and len(front.units) < front.capacity
+                and front.owner in (None, Player.A)
+            ):
+                return front, self._drop_index(screen, pos, front)
+            return None, None
+        if self.drag_card.line is front:
+            if support_area.collidepoint(pos) and len(support.units) < support.capacity:
+                return support, self._drop_index(screen, pos, support)
+            return None, None
+        return None, None
+
+    def on_mouse_down(self, pos: tuple[int, int], screen: Surface, ground: BattleGround) -> None:
+        """
+        按下左键: 结束回合按钮或开始拖拽
+
+        Args:
+            pos: 鼠标位置
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if ground.winner is not None:
+            if self.continue_button.rect.collidepoint(pos):
+                self._continue_after_match()
+            return
+        if ground.pending_choose is not None:
+            for rect, option in self.choose_rects:
+                if rect.collidepoint(pos):
+                    ground.resolve_choose(option)
+                    return
+            ground.cancel_choose()
+            return
+        if ground.pending_choice is not None:
+            if self.end_button.rect.collidepoint(pos):
+                self._end_turn()
+                return
+            for rect, card in self.choice_rects:
+                if rect.collidepoint(pos):
+                    ground.resolve_card_choice(card)
+                    return
+            return
+        request = ground.pending_selection
+        if request is not None and request.player is Player.A:
+            if self.confirm_rect is not None and self.confirm_rect.collidepoint(pos):
+                if request.min_count <= len(self.selection_cards) <= request.max_count:
+                    if ground.resolve_selection(list(self.selection_cards)):
+                        self.selection_cards.clear()
+                return
+            if self.end_button.rect.collidepoint(pos):
+                self._end_turn()
+                return
+            own_hand = ground.hands[Player.A].cards
+            for rect, card in zip(self.hand_rects(screen, len(own_hand)), own_hand):
+                if not rect.collidepoint(pos):
+                    continue
+                if request.filter is not None and not request.filter(card):
+                    return
+                if card in self.selection_cards:
+                    self.selection_cards.remove(card)
+                elif len(self.selection_cards) < request.max_count:
+                    self.selection_cards.append(card)
+                return
+            return
+        if ground.pending_target is not None:
+            self._clear_drag()
+            if pos[1] >= self.own_hand_y:
+                ground.cancel_target()
+                return
+            target = self._pending_target_at(screen, pos, ground)
+            if target is not None:
+                pending_card = ground.pending_target.source
+                if ground.resolve_target(target):
+                    self.message = "指令已使用" if pending_card.type is CardType.ORDER else ""
+            return
+        if self.end_button.rect.collidepoint(pos):
+            self._end_turn()
+            return
+        if ground.turn_owner is not Player.A:
+            return
+        own_hand = ground.hands[Player.A].cards
+        for rect, card in zip(self.hand_rects(screen, len(own_hand)), own_hand):
+            if rect.collidepoint(pos):
+                if card.type is CardType.ORDER and card.targeted:
+                    self.preview_card = card
+                self._start_drag(card, True, rect, pos)
+                return
+        for line, y in ((ground.support_lines[Player.A], self.own_line_y), (ground.front_line, self.front_y)):
+            for rect, card in self.line_units(screen, line, y):
+                if rect.collidepoint(pos) and card.controller is Player.A:
+                    self._start_drag(card, False, rect, pos)
+                    return
+
+    def _preview_target_at(
+        self, screen: Surface, pos: tuple[int, int], ground: BattleGround
+    ) -> Card | None:
+        """
+        返回指向预览状态下鼠标处的合法目标
+
+        Args:
+            screen: 屏幕 Surface
+            pos: 鼠标位置
+            ground: 战斗全局参数
+
+        Returns:
+            合法目标, 没有时为 None
+        """
+        card = self.preview_card
+        if card is None or card.target_valid is None:
+            return None
+        for line, y in (
+            (ground.support_lines[Player.A], self.own_line_y),
+            (ground.support_lines[Player.B], self.opp_line_y),
+            (ground.front_line, self.front_y),
+        ):
+            for rect, unit in self.line_units(screen, line, y):
+                if rect.collidepoint(pos) and card.target_valid(unit, Player.A, ground):
+                    return unit
+        for player, y in ((Player.A, self.own_line_y), (Player.B, self.opp_line_y)):
+            hq = ground.hqs[player]
+            rect = self.hq_rect(screen, ground.support_lines[player], y)
+            if rect.collidepoint(pos) and card.target_valid(hq, Player.A, ground):
+                return hq
+        return None
+
+    def _pending_target_at(
+        self, screen: Surface, pos: tuple[int, int], ground: BattleGround
+    ) -> Card | None:
+        """
+        返回指向状态下鼠标处的合法目标
+
+        Args:
+            screen: 屏幕 Surface
+            pos: 鼠标位置
+            ground: 战斗全局参数
+
+        Returns:
+            合法目标, 没有时为 None
+        """
+        pending = ground.pending_target
+        if pending is None:
+            return None
+        for line, y in (
+            (ground.support_lines[Player.A], self.own_line_y),
+            (ground.support_lines[Player.B], self.opp_line_y),
+            (ground.front_line, self.front_y),
+        ):
+            for rect, card in self.line_units(screen, line, y):
+                if rect.collidepoint(pos) and pending.valid(card):
+                    return card
+        for player, y in ((Player.A, self.own_line_y), (Player.B, self.opp_line_y)):
+            hq = ground.hqs[player]
+            rect = self.hq_rect(screen, ground.support_lines[player], y)
+            if rect.collidepoint(pos) and pending.valid(hq):
+                return hq
+        return None
+
+    def _target_at(
+        self, screen: Surface, pos: tuple[int, int], ground: BattleGround
+    ) -> tuple[Card | None, pygame.Rect | None]:
+        """
+        返回鼠标下可攻击的敌方单位或总部
+
+        Args:
+            screen: 屏幕 Surface
+            pos: 鼠标位置
+            ground: 战斗全局参数
+
+        Returns:
+            (目标, 矩形), 无合法目标时为 (None, None)
+        """
+        attacker = self.drag_card
+        if attacker is None:
+            return None, None
+        for line, y in (
+            (ground.support_lines[Player.B], self.opp_line_y),
+            (ground.front_line, self.front_y),
+        ):
+            for rect, card in self.line_units(screen, line, y):
+                if (
+                    rect.collidepoint(pos)
+                    and card.controller is Player.B
+                    and ground.can_attack(Player.A, attacker, card)
+                ):
+                    return card, rect
+        hq_rect = self.hq_rect(screen, ground.support_lines[Player.B], self.opp_line_y)
+        if hq_rect.collidepoint(pos) and ground.can_attack(Player.A, attacker, ground.hqs[Player.B]):
+            return ground.hqs[Player.B], hq_rect
+        return None, None
+
+    def on_mouse_move(self, pos: tuple[int, int], screen: Surface, ground: BattleGround) -> None:
+        """
+        拖动中更新鼠标位置与高亮目标
+
+        Args:
+            pos: 鼠标位置
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if self.drag_card is None:
+            return
+        self.drag_pos = pos
+        if self.drag_from_hand:
+            self.hover_target = None
+            self.hover_rect = None
+        else:
+            self.hover_target, self.hover_rect = self._target_at(screen, pos, ground)
+
+    def _attack(self, ground: BattleGround, card: Card, target: Card) -> None:
+        """
+        尝试攻击并给出提示
+
+        Args:
+            ground: 战斗全局参数
+            card: 攻击单位
+            target: 目标
+        """
+        if not ground.can_attack(Player.A, card, target):
+            reason = ground.action_block_reason(card, "attack")
+            self.message = reason or "无法攻击：目标不合法或不在攻击范围内"
+            return
+        if ground.attack_unit(Player.A, card, target):
+            self.message = ""
+        else:
+            self.message = "无法攻击：目标不合法或不在攻击范围内"
+
+    def on_mouse_up(self, pos: tuple[int, int], screen: Surface, ground: BattleGround) -> None:
+        """
+        松开左键: 结算拖拽
+
+        Args:
+            pos: 鼠标位置
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if ground.pending_choice is not None:
+            self._clear_drag()
+            return
+        if ground.pending_selection is not None:
+            self._clear_drag()
+            return
+        if self.preview_card is not None:
+            card = self.preview_card
+            target = self._preview_target_at(screen, pos, ground)
+            self.preview_card = None
+            self._clear_drag()
+            if target is None:
+                self.message = "已取消指向"
+                return
+            if not ground.use_card(Player.A, card):
+                self.message = ground.use_block_reason(Player.A, card) or "无法使用该指令"
+                return
+            if ground.pending_target is not None and not ground.resolve_target(target):
+                ground.cancel_target()
+                self.message = "已取消指向"
+                return
+            self.message = "指令已使用"
+            return
+        if ground.pending_target is not None:
+            self._clear_drag()
+            if pos[1] >= self.own_hand_y:
+                ground.cancel_target()
+            return
+        card = self.drag_card
+        from_hand = self.drag_from_hand
+        if card is None:
+            self._clear_drag()
+            return
+        try:
+            if ground.winner is not None or ground.turn_owner is not Player.A:
+                return
+            own_support = ground.support_lines[Player.A]
+            front = ground.front_line
+            support_area = self._line_area(screen, self.own_line_y)
+            front_area = self._line_area(screen, self.front_y)
+
+            if from_hand:
+                if card.type is CardType.ORDER:
+                    if pos[1] < self.own_hand_y:
+                        origin = self.drag_origin or pygame.Rect(0, 0, self.card_w, self.card_h)
+                        if ground.use_card(Player.A, card):
+                            if ground.pending_choose is not None:
+                                self.message = "请选择一项"
+                            elif ground.pending_target is not None:
+                                self.message = "选择目标"
+                            else:
+                                self.message = "指令已使用"
+                                self._add_order_anim(origin)
+                        else:
+                            self.message = ground.use_block_reason(Player.A, card) or "无法使用该指令"
+                    self._clear_drag()
+                    return
+                if support_area.collidepoint(pos):
+                    index = self._drop_index(screen, pos, own_support)
+                    if ground.use_card(Player.A, card, index):
+                        if ground.pending_target is not None:
+                            self.message = "选择目标"
+                        else:
+                            self.message = ""
+                    else:
+                        self.message = ground.use_block_reason(Player.A, card) or "无法部署该单位"
+                self._clear_drag()
+                return
+
+            for rect, target in self.line_units(screen, ground.support_lines[Player.B], self.opp_line_y):
+                if rect.collidepoint(pos):
+                    self._attack(ground, card, target)
+                    return
+            if self.hq_rect(screen, ground.support_lines[Player.B], self.opp_line_y).collidepoint(pos):
+                self._attack(ground, card, ground.hqs[Player.B])
+                return
+            for rect, target in self.line_units(screen, front, self.front_y):
+                if rect.collidepoint(pos) and target.controller is Player.B:
+                    self._attack(ground, card, target)
+                    return
+            if support_area.collidepoint(pos):
+                if card.line is own_support:
+                    self.message = "不能在同一战线内移动"
+                    return
+                index = self._drop_index(screen, pos, own_support)
+                if ground.move_unit(Player.A, card, own_support, index):
+                    self.message = "单位已移动"
+                else:
+                    self.message = ground.action_block_reason(card, "move") or "无法移动该单位"
+                return
+            if front_area.collidepoint(pos):
+                if card.line is front:
+                    self.message = "不能在同一战线内移动"
+                    return
+                index = self._drop_index(screen, pos, front)
+                if ground.move_unit(Player.A, card, front, index):
+                    self.message = "单位已移动到前线"
+                else:
+                    self.message = ground.action_block_reason(card, "move") or "无法移动该单位"
+        finally:
+            self._clear_drag()
+
+    def _clear_drag(self) -> None:
+        """清空拖拽状态"""
+        self.drag_card = None
+        self.drag_from_hand = False
+        self.drag_origin = None
+        self.drag_pos = None
+        self.hover_target = None
+        self.hover_rect = None
+
+    def _draw_drag(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制拖拽中的红色箭头
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if self.drag_card is None or self.drag_pos is None or self.drag_origin is None:
+            return
+        if self.drag_card.type is CardType.ORDER and not self.drag_card.targeted:
+            return
+        start = self.drag_origin.center
+        end = self.drag_pos
+        color = (225, 60, 60)
+        width = max(3, self.card_w // 40)
+        pygame.draw.line(screen, color, start, end, width)
+        angle = math.atan2(end[1] - start[1], end[0] - start[0])
+        size = max(12, self.card_w // 7)
+        left = (end[0] - size * math.cos(angle - 0.42), end[1] - size * math.sin(angle - 0.42))
+        right = (end[0] - size * math.cos(angle + 0.42), end[1] - size * math.sin(angle + 0.42))
+        pygame.draw.polygon(screen, color, [end, left, right])
+
+    def _draw_drag_ghost(self, screen: Surface) -> None:
+        """
+        在鼠标位置绘制半透明的拖拽手牌, 场上单位不跟随鼠标
+
+        Args:
+            screen: 屏幕 Surface
+        """
+        if self.drag_card is None or self.drag_pos is None or not self.drag_from_hand:
+            return
+        if self.drag_card.targeted:
+            return
+        art = self._card_art(self.drag_card) or self.face
+        ghost = art.copy()
+        ghost.set_alpha(120)
+        rect = ghost.get_rect(center=self.drag_pos)
+        screen.blit(ghost, rect)
+        self._draw_stats_overlay(screen, self.drag_card, rect)
+        pygame.draw.rect(screen, (255, 210, 80), rect, 2, border_radius=4)
+
+    def _draw_preview_target(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        指向预览时高亮鼠标下的合法目标
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        if self.preview_card is None:
+            return
+        target = self._preview_target_at(screen, pygame.mouse.get_pos(), ground)
+        if target is None:
+            return
+        record = self.frame_rects.get(id(target))
+        if record is not None:
+            pygame.draw.rect(screen, (235, 70, 70), record[1], 3, border_radius=4)
+
+    def _draw_target_arrow(self, screen: Surface, ground: BattleGround) -> None:
+        """
+        绘制指向状态的红色箭头与目标高亮
+
+        Args:
+            screen: 屏幕 Surface
+            ground: 战斗全局参数
+        """
+        pending = ground.pending_target
+        if pending is None:
+            return
+        record = self.frame_rects.get(id(pending.source))
+        if record is not None:
+            start = record[1].center
+        elif pending.source.type is CardType.ORDER:
+            start = self.order_origins.get(id(pending.source), pygame.mouse.get_pos())
+        else:
+            start = (screen.get_width() // 2, self.front_y + self.card_h // 2)
+        end = pygame.mouse.get_pos()
+        color = (235, 70, 70)
+        pygame.draw.line(screen, color, start, end, 4)
+        direction = pygame.Vector2(end) - pygame.Vector2(start)
+        if direction.length_squared() > 0:
+            direction = direction.normalize()
+            normal = pygame.Vector2(-direction.y, direction.x)
+            tip = pygame.Vector2(end)
+            left = tip - direction * 18 + normal * 9
+            right = tip - direction * 18 - normal * 9
+            pygame.draw.polygon(screen, color, [tuple(tip), tuple(left), tuple(right)])
+        hovered = self._pending_target_at(screen, end, ground)
+        if hovered is not None:
+            hovered_rect = self.frame_rects.get(id(hovered))
+            if hovered_rect is not None:
+                pygame.draw.rect(screen, color, hovered_rect[1], 3, border_radius=4)
+        self._text(
+            screen,
+            "选择目标, 点击手牌取消",
+            (screen.get_width() // 2, self.own_hand_y - 26),
+            (240, 190, 100),
+            center=True,
+        )
+
+# ==================== 主循环 ====================
+
+
 class CardBrowser:
     """卡组与收藏浏览界面。"""
 
@@ -8154,9 +9037,9 @@ class CardBrowser:
         if image is None:
             entry = self.art_index.get(card.display_name) or self.art_index.get(card.name)
             if isinstance(entry, dict):
-                relative = entry.get("path")
-                if isinstance(relative, str):
-                    fallback = self.assets / "cards" / relative
+                relative_value: object = entry.get("path")
+                if isinstance(relative_value, str):
+                    fallback = self.assets / "cards" / relative_value
                     if fallback.is_file():
                         try:
                             image = pygame.image.load(str(fallback)).convert_alpha()
@@ -8259,7 +9142,7 @@ class CardBrowser:
         back_rect = back.get_rect(midtop=(panel.centerx, y + 70))
         screen.blit(back, back_rect)
 
-        slots = [
+        slots: list[tuple[str, Surface | None]] = [
             ("卡背", self.deck_back_image),
             ("桌饰", None),
             ("总部", None),
