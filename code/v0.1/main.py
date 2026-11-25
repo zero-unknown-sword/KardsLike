@@ -1499,16 +1499,32 @@ class Deck:
 
     SIZE: int = 39
 
-    def __init__(self, cards: list[Card], hq: Card) -> None:
+    def __init__(
+        self,
+        cards: list[Card],
+        hq: Card,
+        name: str = "",
+        card_back: str = "",
+        main_country: Country = Country.NEUTRAL,
+        ally_country: Country | None = None,
+    ) -> None:
         """
         创建卡组
 
         Args:
             cards: 卡牌列表
             hq: 总部
+            name: 卡组名称
+            card_back: 卡背标识
+            main_country: 主国
+            ally_country: 盟国
         """
         self.cards: list[Card] = cards
         self.hq: Card = hq
+        self.name: str = name
+        self.card_back: str = card_back
+        self.main_country: Country = main_country
+        self.ally_country: Country | None = ally_country
 
     def draw(self) -> Card | None:
         """
@@ -5042,7 +5058,14 @@ def validate_deck(
     return errors
 
 
-def make_deck(pool: list[str], owner: Player, country: Country | None = None) -> Deck:
+def make_deck(
+    pool: list[str],
+    owner: Player,
+    country: Country | None = None,
+    name: str = "",
+    card_back: str = "",
+    ally_country: Country | None = None,
+) -> Deck:
     """
     按卡牌 id 池循环构造 39 张卡组
 
@@ -5050,6 +5073,9 @@ def make_deck(pool: list[str], owner: Player, country: Country | None = None) ->
         pool: 卡牌 id 池
         owner: 卡组所有者
         country: 总部国家
+        name: 卡组名称
+        card_back: 卡背标识
+        ally_country: 盟国
 
     Returns:
         卡组
@@ -5072,7 +5098,14 @@ def make_deck(pool: list[str], owner: Player, country: Country | None = None) ->
         card.owner = owner
         card.controller = owner
         card.add_tag(CardTag.IN_START)
-    return Deck(deck_cards, hq)
+    return Deck(
+        deck_cards,
+        hq,
+        name=name,
+        card_back=card_back,
+        main_country=country or Country.NEUTRAL,
+        ally_country=ally_country,
+    )
 
 
 def create_battle() -> BattleGround:
@@ -5108,6 +5141,7 @@ def create_battle() -> BattleGround:
 SCENE_MENU: str = "menu"
 SCENE_START: str = "start"
 SCENE_BATTLE: str = "battle"
+SCENE_CARDS: str = "cards"
 
 # 开始界面选项
 START_OPTIONS: list[str] = ["乱斗", "赛事", "竞技场", "战区", "战斗代码", "对战模式"]
@@ -5211,6 +5245,7 @@ class Global:
     status: Status = Status()
     battle_ground: BattleGround | None = None
     battle_ui: "BattleUI | None" = None
+    card_browser: "CardBrowser | None" = None
     save_data: SaveData | None = None
 
 
@@ -5379,7 +5414,8 @@ def handle_menu_click(
         Global.status.scene = SCENE_START
         logger.info("进入开始界面")
     elif card_rect.collidepoint(pos):
-        show_alert("卡牌界面尚未完成")
+        Global.status.scene = SCENE_CARDS
+        logger.info("进入卡牌界面")
 
 
 def show_alert(message: str) -> None:
@@ -8825,6 +8861,174 @@ class BattleUI:
 # ==================== 主循环 ====================
 
 
+class CardBrowser:
+    """卡组与收藏浏览界面。"""
+
+    NATION_DIRS: dict[Country, str] = {
+        Country.GERMANY: "Germany",
+        Country.BRITAIN: "Britain",
+        Country.JAPAN: "Japan",
+        Country.SOVIET: "Soviet",
+        Country.USA: "USA",
+        Country.FRANCE: "France",
+        Country.ITALY: "Italy",
+        Country.POLAND: "Poland",
+        Country.FINLAND: "Finland",
+        Country.ANZAC: "Anzac",
+        Country.NEUTRAL: "Neutral",
+    }
+
+    def __init__(
+        self,
+        loader: ImageLoader,
+        assets: Path,
+        font: Font,
+        deck: Deck,
+    ) -> None:
+        self.loader: ImageLoader = loader
+        self.assets: Path = assets
+        self.font: Font = font
+        self.small: Font = load_font(max(12, font.get_height() * 2 // 3))
+        self.deck: Deck = deck
+        self.mode: str = "deck"
+        self.scroll: int = 0
+        self.card_rects: list[tuple[pygame.Rect, Card]] = []
+        self.art_cache: dict[str, Surface | None] = {}
+        self.tab_deck = pygame.Rect(24, 20, 150, 48)
+        self.tab_collection = pygame.Rect(184, 20, 150, 48)
+        self.back_rect = pygame.Rect(0, 20, 110, 48)
+        self.collection: list[Card] | None = None
+
+    def _current_cards(self) -> list[Card]:
+        if self.mode == "deck":
+            return self.deck.cards
+        if self.collection is None:
+            self.collection = [
+                cards.create(card_id)
+                for card_id in sorted(cards.all_ids())
+            ]
+        return self.collection
+
+    def _art(self, card: Card) -> Surface | None:
+        key = f"{card.country}:{card.art}"
+        if key in self.art_cache:
+            return self.art_cache[key]
+        nation = self.NATION_DIRS.get(card.country, "Neutral")
+        path = self.assets / "cards" / nation / card.art
+        image: Surface | None = None
+        if card.art and path.is_file():
+            try:
+                image = pygame.image.load(str(path)).convert_alpha()
+            except pygame.error:
+                image = None
+        self.art_cache[key] = image
+        return image
+
+    def _layout(self, screen: Surface, count: int) -> tuple[int, int, int, int, int]:
+        margin = 24
+        gap = 10
+        cols = 8
+        top = 140
+        cell_w = max(56, (screen.get_width() - margin * 2 - gap * (cols - 1)) // cols)
+        cell_h = max(80, int(cell_w * 702 / 500))
+        rows = max(1, (screen.get_height() - top - margin + gap) // (cell_h + gap))
+        return margin, top, cell_w, cell_h, rows
+
+    def draw(self, screen: Surface) -> None:
+        screen.fill((18, 22, 20))
+        mouse = pygame.mouse.get_pos()
+        for rect, label, mode in (
+            (self.tab_deck, "卡组", "deck"),
+            (self.tab_collection, "收藏", "collection"),
+        ):
+            active = self.mode == mode
+            color = (92, 116, 84) if active else (55, 65, 56)
+            if rect.collidepoint(mouse) and not active:
+                color = (72, 88, 70)
+            pygame.draw.rect(screen, color, rect, border_radius=8)
+            pygame.draw.rect(screen, (210, 195, 145), rect, 2, border_radius=8)
+            self._center_text(screen, label, rect.center, (240, 235, 210), self.font)
+
+        self.back_rect.right = screen.get_width() - 24
+        pygame.draw.rect(screen, (55, 65, 56), self.back_rect, border_radius=8)
+        pygame.draw.rect(screen, (180, 170, 135), self.back_rect, 2, border_radius=8)
+        self._center_text(screen, "返回", self.back_rect.center, (230, 225, 200), self.font)
+
+        current = self._current_cards()
+        margin, top, cell_w, cell_h, rows = self._layout(screen, len(current))
+        gap = 10
+        cols = 8
+        max_scroll = max(0, (len(current) + cols - 1) // cols - rows)
+        self.scroll = max(0, min(self.scroll, max_scroll))
+
+        if self.mode == "deck":
+            self._center_text(
+                screen,
+                f"{self.deck.name}    {self.deck.main_country.value} / "
+                f"{self.deck.ally_country.value if self.deck.ally_country else '无'}    "
+                f"{len(current)} 张",
+                (screen.get_width() // 2, 92),
+                (225, 215, 180),
+                self.font,
+            )
+        else:
+            self._center_text(
+                screen,
+                f"收藏    已注册 {len(current)} 张",
+                (screen.get_width() // 2, 92),
+                (225, 215, 180),
+                self.font,
+            )
+
+        self.card_rects = []
+        start = self.scroll * cols
+        for index, card in enumerate(current[start : start + rows * cols]):
+            row, col = divmod(index, cols)
+            rect = pygame.Rect(
+                margin + col * (cell_w + gap),
+                top + row * (cell_h + gap),
+                cell_w,
+                cell_h,
+            )
+            art = self._art(card)
+            if art is not None:
+                screen.blit(pygame.transform.smoothscale(art, rect.size), rect)
+            else:
+                pygame.draw.rect(screen, (45, 48, 40), rect, border_radius=4)
+                self._center_text(screen, card.display_name, rect.center, (230, 225, 200), self.small)
+            pygame.draw.rect(screen, (150, 140, 105), rect, 2, border_radius=4)
+            cost = self.small.render(str(card.cost), True, (255, 240, 190))
+            screen.blit(cost, (rect.x + 4, rect.y + 3))
+            self.card_rects.append((rect, card))
+
+        if max_scroll > 0:
+            self._center_text(
+                screen,
+                f"{self.scroll + 1}/{max_scroll + 1}  滚轮翻页",
+                (screen.get_width() // 2, screen.get_height() - 18),
+                (150, 150, 135),
+                self.small,
+            )
+
+    def _center_text(self, screen: Surface, text: str, center: tuple[int, int], color: Color, font: Font) -> None:
+        surface = font.render(text, True, color)
+        screen.blit(surface, surface.get_rect(center=center))
+
+    def handle_event(self, event: Event, screen: Surface) -> None:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.tab_deck.collidepoint(event.pos):
+                self.mode = "deck"
+                self.scroll = 0
+            elif self.tab_collection.collidepoint(event.pos):
+                self.mode = "collection"
+                self.scroll = 0
+            elif self.back_rect.collidepoint(event.pos):
+                Global.status.scene = SCENE_MENU
+        elif event.type == pygame.MOUSEWHEEL:
+            self.scroll += -1 if event.y > 0 else 1
+            self.scroll = max(0, self.scroll)
+
+
 def draw_battle(screen: Surface, font: Font) -> None:
     """
     绘制战斗场景
@@ -8882,6 +9086,9 @@ def loop(
                 handle_menu_click(event.pos, start_rect, card_rect)
             elif Global.status.scene == SCENE_START:
                 button_group.handle_event(event)
+            elif Global.status.scene == SCENE_CARDS:
+                if Global.card_browser is not None:
+                    Global.card_browser.handle_event(event, screen)
             elif Global.status.scene == SCENE_BATTLE:
                 ground = Global.battle_ground
                 ui = Global.battle_ui
@@ -8899,6 +9106,9 @@ def loop(
                 ui = Global.battle_ui
                 if ground is not None and ui is not None:
                     ui.on_mouse_up(event.pos, screen, ground)
+        elif event.type == pygame.MOUSEWHEEL and Global.status.scene == SCENE_CARDS:
+            if Global.card_browser is not None:
+                Global.card_browser.handle_event(event, screen)
         elif event.type == BATTLE_START:
             logger.info(
                 "战斗开始 host=%s guest=%s host_country=%s guest_country=%s",
@@ -8920,6 +9130,9 @@ def loop(
         )
     elif Global.status.scene == SCENE_START:
         draw_start(screen, background, button_group)
+    elif Global.status.scene == SCENE_CARDS:
+        if Global.card_browser is not None:
+            Global.card_browser.draw(screen)
     elif Global.status.scene == SCENE_BATTLE:
         ground = Global.battle_ground
         if ground is not None:
@@ -8973,6 +9186,17 @@ def main() -> None:
     background = pygame.transform.smoothscale(
         loader.load(assets / "ui" / "开始背景.png"), screen.get_size()
     )
+    font = load_font(36)
+    browser_deck = make_deck(
+        default_deck_ids(),
+        Player.A,
+        Country.SOVIET,
+        name=DEFAULT_DECK_NAME,
+        card_back="card_back.png",
+        ally_country=Country.BRITAIN,
+    )
+    Global.card_browser = CardBrowser(loader, assets, font, browser_deck)
+
     start_y = (screen.get_height() - button_size * 2 - button_gap) // 2
     start_rect = pygame.Rect(40, start_y, button_size, button_size)
     card_rect = pygame.Rect(
@@ -8981,7 +9205,6 @@ def main() -> None:
         button_size,
         button_size,
     )
-    font = load_font(36)
     button_group = make_start_buttons(screen.get_width(), screen.get_height(), font)
     Global.battle_ui = BattleUI(loader, assets, font)
     logger.info("启动完成, 总用时: %.1f ms", (time.perf_counter() - start_time) * 1000)
