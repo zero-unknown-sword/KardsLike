@@ -7,6 +7,7 @@ const fileView = document.getElementById("file-view");
 const forgeFrame = document.getElementById("forge-frame");
 const targetEl = document.getElementById("declaration-target");
 const metaEl = document.getElementById("declaration-meta");
+const resourceCount = document.getElementById("resource-count");
 
 let files = [];
 let selectedFile = "";
@@ -27,6 +28,17 @@ async function api(path, options = {}) {
   }
   return data;
 }
+
+document.querySelectorAll(".zone-tabs button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".zone-tabs button").forEach((item) => {
+      item.classList.toggle("active", item === button);
+    });
+    document.querySelectorAll(".zone").forEach((zone) => {
+      zone.classList.toggle("active", zone.id === `zone-${button.dataset.zone}`);
+    });
+  });
+});
 
 document.querySelectorAll(".workspace-tabs button").forEach((button) => {
   button.addEventListener("click", () => {
@@ -51,6 +63,7 @@ function renderFiles() {
     button.addEventListener("click", () => openFile(path));
     fileList.appendChild(button);
   }
+  resourceCount.textContent = `${files.length} 个文件`;
 }
 
 async function loadFiles() {

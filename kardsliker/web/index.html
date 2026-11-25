@@ -8,6 +8,11 @@
 <body>
   <header class="topbar">
     <div class="brand">KardsLiker <span>mod editor</span></div>
+    <nav class="zone-tabs">
+      <button data-zone="workspace" class="active">工作区</button>
+      <button data-zone="resources">资源区</button>
+      <button data-zone="declarations">声明区</button>
+    </nav>
     <div class="top-actions">
       <button id="sync-card">同步卡面</button>
       <button id="parse-card">解析 KL</button>
@@ -16,17 +21,8 @@
     </div>
   </header>
 
-  <main class="layout">
-    <aside class="resources">
-      <div class="zone-head">
-        <h2>资源区</h2>
-        <span>文件</span>
-      </div>
-      <input id="filter" placeholder="筛选文件..." autocomplete="off">
-      <div id="files" class="file-list"></div>
-    </aside>
-
-    <section class="workspace">
+  <main>
+    <section id="zone-workspace" class="zone active">
       <div class="zone-head">
         <h2>工作区</h2>
         <nav class="workspace-tabs">
@@ -66,25 +62,40 @@
       </div>
     </section>
 
-    <aside class="declarations">
+    <section id="zone-resources" class="zone">
+      <div class="zone-head">
+        <h2>资源区</h2>
+        <span id="resource-count">文件</span>
+      </div>
+      <div class="resource-body">
+        <div class="resource-list">
+          <input id="filter" placeholder="筛选文件..." autocomplete="off">
+          <div id="files" class="file-list"></div>
+        </div>
+        <div class="resource-preview">
+          <div class="pane-label">资源预览</div>
+          <pre id="file-view">选择资源文件查看内容。</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="zone-declarations" class="zone">
       <div class="zone-head">
         <h2>声明区</h2>
         <span id="declaration-target">等待解析</span>
       </div>
-      <div id="declaration-meta" class="declaration-meta">
-        <div><b>名称</b><span>-</span></div>
-        <div><b>ID</b><span>-</span></div>
-        <div><b>国家 / 类型</b><span>-</span></div>
+      <div class="declaration-body">
+        <div id="declaration-meta" class="declaration-meta">
+          <div><b>名称</b><span>-</span></div>
+          <div><b>ID</b><span>-</span></div>
+          <div><b>国家 / 类型</b><span>-</span></div>
+        </div>
+        <pre id="card-code" class="declaration-code">在工作区编写 KL，然后点击“解析 KL”。</pre>
+        <div class="declaration-actions">
+          <button id="write-card">写入 mod</button>
+        </div>
       </div>
-      <pre id="card-code" class="declaration-code">在左侧编写 KL，然后点击“解析 KL”。</pre>
-      <div class="declaration-actions">
-        <button id="write-card">写入 mod</button>
-      </div>
-      <div class="file-view">
-        <div class="pane-label">资源预览</div>
-        <pre id="file-view">选择资源文件查看内容。</pre>
-      </div>
-    </aside>
+    </section>
   </main>
 
   <script src="app.js"></script>
