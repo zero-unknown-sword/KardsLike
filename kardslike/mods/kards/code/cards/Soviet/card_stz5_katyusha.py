@@ -17,6 +17,7 @@ from main import (
     Procedure,
     Rarity,
     Zone,
+    DamageType,
 )
 
 
@@ -25,6 +26,7 @@ def dealt_damage(card: Card, event: Event, ground: BattleGround) -> bool:
     return (
         event.dict.get("source") is card
         and event.dict.get("target") is not card
+        and event.dict.get("kind") in (DamageType.COUNTER, DamageType.ATTACK)
         and int(event.dict.get("amount", 0)) > 0
     )
 
