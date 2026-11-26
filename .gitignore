@@ -40,3 +40,6 @@ kardsliker/projects/
 
 # DeepSeek API Key
 APIKEY.txt
+
+# 对话 AI 状态桥
+kardslike/chat_ai/

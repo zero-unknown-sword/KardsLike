@@ -8,6 +8,7 @@ from __future__ import annotations
 # cSpell:ignore usace
 import logging
 import math
+import os
 import random
 import sys
 import json
@@ -34,6 +35,7 @@ if _PACKAGE_ROOT not in sys.path:
 
 from tools import BetterLogger, Button, ButtonGroup, Color, CrashReporter, ImageLoader, IntAttr, LogManager
 from llm_agent import DeepSeekPlanner
+from chat_bridge import publish_state, wait_action
 
 # 让动态加载的卡牌文件能通过 import main 拿到当前模块(避免重复导入)
 sys.modules["main"] = sys.modules[__name__]
@@ -5666,6 +5668,44 @@ class AIController:
 
     def __init__(self) -> None:
         self.llm: DeepSeekPlanner = DeepSeekPlanner()
+        self.chat_mode: bool = os.environ.get("KARDSLIKE_CHAT_AI") == "1"
+
+    def _chat_step(self, ground: BattleGround, opponent: Player) -> None:
+        """暂停 AI 回合, 等待对话 AI 写入动作。"""
+        support = ground.support_lines[opponent]
+        path = publish_state(ground, opponent)
+        logger.info("等待对话 AI 动作: %s", path)
+        action = wait_action(300.0)
+        if not isinstance(action, dict):
+            logger.info("对话 AI 超时, 结束回合")
+            ground.end_turn()
+            return
+        if action.get("type") == "end":
+            ground.end_turn()
+            return
+        if action.get("type") == "play":
+            try:
+                index = int(action.get("index", -1))
+            except (TypeError, ValueError):
+                index = -1
+            hand = ground.hands[opponent].cards
+            if not 0 <= index < len(hand):
+                ground.end_turn()
+                return
+            card = hand[index]
+            if card.is_unit and len(support.units) >= support.capacity:
+                ground.end_turn()
+                return
+            if ground.use_card(opponent, card, support.hq_index):
+                if ground.pending_target is not None:
+                    pending = ground.pending_target
+                    target = next((item for item in ground.targets if pending.valid(item)), None)
+                    if target is None:
+                        ground.cancel_target()
+                    else:
+                        ground.resolve_target(target)
+                return
+        ground.end_turn()
 
     def step(self, ground: BattleGround) -> None:
         """
@@ -5675,6 +5715,9 @@ class AIController:
             ground: 战斗全局参数
         """
         opponent = Player.B
+        if self.chat_mode:
+            self._chat_step(ground, opponent)
+            return
         credits = ground.kredits[opponent].credits
         support = ground.support_lines[opponent]
         logger.debug(
