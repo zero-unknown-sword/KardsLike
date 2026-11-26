@@ -39,14 +39,12 @@ def _salamander_after_attack(card, ground):
     ground.remove_unit(card, card)
 
     def back() -> None:
-        # 返回战场时优先回到原战线/原位置；绝不回手。
+        # 返回战场时优先回到原战线/原位置；失败则永久留在移除区。
         if line is not None and ground.add_unit(player, card, index=index, line=line):
             return
         if ground.add_unit(player, card):
             return
         if line is not None and line.kind.name == "FRONT":
-            if ground.add_unit(player, card, line=ground.support_lines[player]):
-                return
-        ground.pending_turn_start[player].append(back)
+            ground.add_unit(player, card, line=ground.support_lines[player])
 
     ground.pending_turn_start[player].append(back)
