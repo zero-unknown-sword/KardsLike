@@ -2250,7 +2250,9 @@ class BattleGround:
         random.shuffle(self.decks[Player.A].cards)
         random.shuffle(self.decks[Player.B].cards)
         self.deal_initial_hands()
-        self.kredits[self.first_player].credits = self.kredits[self.first_player].slots
+        for player in (Player.A, Player.B):
+            self.kredits[player].slots = 1
+            self.kredits[player].credits = 1
         self.turns_taken[self.first_player] = 1
         start_event = pygame.event.Event(
             BATTLE_START,
@@ -2763,6 +2765,7 @@ class BattleGround:
         self.pending_isolated = remaining_isolated
         self.emit(Event(EventType.TURN_START, player=player))
         if self.turns_taken[player] == 0:
+            self.kredits[player].slots = max(1, self.kredits[player].slots)
             self.kredits[player].credits = self.kredits[player].slots
         else:
             self.kredits[player].start_turn()
