@@ -5252,7 +5252,7 @@ def create_battle() -> BattleGround:
         host_ally=Country.BRITAIN,
         guest_ally=Country.POLAND,
         host_deck=default_deck_ids(),
-        guest_deck=DECKS.get("苏芬词条", DECKS.get("苏英钢铁中速", default_deck_ids())),
+        guest_deck=DECKS.get("德波前线", DECKS.get("苏英钢铁中速", default_deck_ids())),
     )
     deck_a = make_deck(config.host_deck, Player.A, config.host_country)
     deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
