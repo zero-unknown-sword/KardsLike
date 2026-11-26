@@ -6,6 +6,7 @@ main.py
 from __future__ import annotations
 
 # cSpell:ignore usace
+import inspect
 import logging
 import math
 import os
@@ -3311,10 +3312,19 @@ class BattleGround:
             callback: 选定目标后的执行器
             cancel: 取消时的回调
         """
+        try:
+            needs_context = len(inspect.signature(valid).parameters) >= 3
+        except (TypeError, ValueError):
+            needs_context = True
+        wrapped = (
+            (lambda target: valid(target, player, self))
+            if needs_context
+            else valid
+        )
         self.pending_target = PendingTarget(
             player,
             source,
-            lambda target: valid(target, player, self),
+            wrapped,
             callback,
             cancel,
         )
