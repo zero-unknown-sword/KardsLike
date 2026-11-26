@@ -21,8 +21,12 @@ from main import (
 
 def action(card: Card, event: Event, ground: BattleGround) -> None:
     """消灭所有对战词条数不大于 1 的单位。"""
+    battle_keywords = {"guard", "ambush", "blitz", "shock", "smoke", "fury", "armor"}
     for unit in list(ground.all_targets()):
-        if unit.is_unit and len(unit.keywords) <= 1:
+        if not unit.is_unit:
+            continue
+        count = sum(1 for keyword in unit.keywords if keyword in battle_keywords)
+        if count <= 2:
             card.destroy(unit, ground)
 
 

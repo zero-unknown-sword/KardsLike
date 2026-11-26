@@ -33,11 +33,9 @@ def action(card: Card, event: Event, ground: BattleGround) -> None:
         if target is None:
             return
         owner = target.controller
-        for unit in ground.all_targets():
+        for unit in list(ground.all_targets()):
             if unit.controller is owner and unit.is_unit and unit is not target:
-                unit.at = target.at
-                unit.df = target.df
-                unit.max_df = target.max_df
+                ground.transform_unit(unit, target)
 
     ground.request_target(player, card, target_valid, apply)
 

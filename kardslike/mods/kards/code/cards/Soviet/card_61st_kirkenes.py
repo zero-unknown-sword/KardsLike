@@ -7,6 +7,9 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from main import CardData, CardType, Country, Rarity
+from mods.kards.code.keywords.ambush import KEYWORD as AMBUSH
+from mods.kards.code.keywords.guard import KEYWORD as GUARD
+from mods.kards.code.keywords.shock import KEYWORD as SHOCK
 
 CARD_DATA = CardData(
     type=CardType.INFANTRY,
@@ -19,4 +22,5 @@ CARD_DATA = CardData(
     at=3,
     df=4,
     operation_cost=1,
+    keywords=[GUARD, AMBUSH, SHOCK],
 )

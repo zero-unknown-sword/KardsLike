@@ -6,6 +6,8 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from mods.kards.code.keywords.blitz import KEYWORD as BLITZ
+
 from main import (
     BattleGround,
     Card,
@@ -49,6 +51,7 @@ CARD_DATA = CardData(
     at=1,
     df=2,
     operation_cost=0,
+    keywords=[BLITZ],
     procedures=[
         Procedure(EventType.DAMAGED, dealt_damage, add_blast),
     ],

@@ -4087,6 +4087,28 @@ class BattleGround:
         card.zone = Zone.HAND
         self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
 
+    def transform_unit(self, unit: Card, template: Card) -> Card | None:
+        """把单位转换为模板的原始状态，保留战线位置和控制者。"""
+        line = unit.line
+        if line is None or not template.card_id:
+            return None
+        try:
+            index = line.units.index(unit)
+        except ValueError:
+            return None
+        replacement = cards.create(template.card_id)
+        replacement.owner = unit.owner
+        replacement.controller = unit.controller
+        replacement.line = line
+        replacement.zone = unit.zone
+        replacement.revealed = unit.revealed
+        replacement.deployed_turn = unit.deployed_turn
+        replacement.acted_turn = unit.acted_turn
+        replacement.moved_turn = unit.moved_turn
+        replacement.attacked_turn = unit.attacked_turn
+        line.units[index] = replacement
+        return replacement
+
     def remove_unit(self, card: Card, source: Card) -> None:
         """
         将单位从战场移除(非消灭), 进入移除区
@@ -5230,7 +5252,7 @@ def create_battle() -> BattleGround:
         host_ally=Country.BRITAIN,
         guest_ally=Country.POLAND,
         host_deck=default_deck_ids(),
-        guest_deck=default_deck_ids(),
+        guest_deck=DECKS.get("苏英钢铁中速", default_deck_ids()),
     )
     deck_a = make_deck(config.host_deck, Player.A, config.host_country)
     deck_b = make_deck(config.guest_deck, Player.B, config.guest_country)
