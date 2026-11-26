@@ -62,6 +62,24 @@ enemy_support / enemy_front
 python kardslike/chat_bridge.py play 0
 ```
 
+- 支援线单位攻击敌方 HQ：
+
+```powershell
+python kardslike/chat_bridge.py attack 0 hq
+```
+
+- 攻击敌方支援线单位：
+
+```powershell
+python kardslike/chat_bridge.py attack 0 support 0
+```
+
+- 攻击敌方前线单位：
+
+```powershell
+python kardslike/chat_bridge.py attack 0 front 0
+```
+
 - 结束回合：
 
 ```powershell

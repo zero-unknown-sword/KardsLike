@@ -5778,6 +5778,33 @@ class AIController:
                     else:
                         ground.resolve_target(target)
                 return
+        if action.get("type") == "attack":
+            try:
+                attacker_index = int(action.get("attacker", -1))
+            except (TypeError, ValueError):
+                attacker_index = -1
+            if not 0 <= attacker_index < len(support.units):
+                ground.end_turn()
+                return
+            attacker = support.units[attacker_index]
+            target_name = str(action.get("target", ""))
+            target: Card | None = None
+            if target_name == "hq":
+                target = ground.hqs[opponent.opponent]
+            else:
+                try:
+                    target_index = int(action.get("target_index", -1))
+                except (TypeError, ValueError):
+                    target_index = -1
+                pool = (
+                    ground.support_lines[opponent.opponent].units
+                    if target_name == "support"
+                    else ground.front_line.units
+                )
+                if 0 <= target_index < len(pool):
+                    target = pool[target_index]
+            if target is not None and ground.attack_unit(opponent, attacker, target):
+                return
         ground.end_turn()
 
     def step(self, ground: BattleGround) -> None:

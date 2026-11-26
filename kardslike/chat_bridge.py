@@ -105,6 +105,10 @@ def main() -> None:
     sub.add_parser("show", help="打印当前状态")
     play = sub.add_parser("play", help="打出手牌")
     play.add_argument("index", type=int)
+    attack = sub.add_parser("attack", help="用支援线单位攻击")
+    attack.add_argument("attacker", type=int)
+    attack.add_argument("target", help="hq 或 support/front")
+    attack.add_argument("target_index", type=int, nargs="?")
     sub.add_parser("end", help="结束回合")
     sub.add_parser("clear", help="清除动作")
     args = parser.parse_args()
@@ -113,6 +117,12 @@ def main() -> None:
     elif args.command == "play":
         write_action({"type": "play", "index": args.index})
         print(f"queued play {args.index}")
+    elif args.command == "attack":
+        action = {"type": "attack", "attacker": args.attacker, "target": args.target}
+        if args.target_index is not None:
+            action["target_index"] = args.target_index
+        write_action(action)
+        print(f"queued attack {args.attacker} -> {args.target}")
     elif args.command == "end":
         write_action({"type": "end"})
         print("queued end")
