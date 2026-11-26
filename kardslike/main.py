@@ -3310,7 +3310,13 @@ class BattleGround:
             callback: 选定目标后的执行器
             cancel: 取消时的回调
         """
-        self.pending_target = PendingTarget(player, source, valid, callback, cancel)
+        self.pending_target = PendingTarget(
+            player,
+            source,
+            lambda target: valid(target, player, self),
+            callback,
+            cancel,
+        )
 
     def resolve_target(self, target: Card) -> bool:
         """
