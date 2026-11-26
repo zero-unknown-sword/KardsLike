@@ -33,6 +33,7 @@ if _PACKAGE_ROOT not in sys.path:
     sys.path.insert(0, _PACKAGE_ROOT)
 
 from tools import BetterLogger, Button, ButtonGroup, Color, CrashReporter, ImageLoader, IntAttr, LogManager
+from llm_agent import DeepSeekPlanner
 
 # 让动态加载的卡牌文件能通过 import main 拿到当前模块(避免重复导入)
 sys.modules["main"] = sys.modules[__name__]
@@ -5663,6 +5664,9 @@ def load_stat_font(size: int) -> Font:
 class AIController:
     """电脑玩家决策器"""
 
+    def __init__(self) -> None:
+        self.llm: DeepSeekPlanner = DeepSeekPlanner()
+
     def step(self, ground: BattleGround) -> None:
         """
         执行一步电脑决策: 能攻击则攻击, 否则移动, 否则出牌, 最后结束回合
@@ -5715,6 +5719,13 @@ class AIController:
                     return
 
         playable = [card for card in ground.hands[opponent].cards if card.cost <= credits]
+        if self.llm.available and playable:
+            choice = self.llm.choose_card(ground, opponent, playable)
+            if choice == -1:
+                ground.end_turn()
+                return
+            if choice is not None:
+                playable = [playable[choice]]
         for card in playable:
             if card.is_unit and len(support.units) >= support.capacity:
                 continue

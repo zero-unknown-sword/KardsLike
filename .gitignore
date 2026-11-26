@@ -37,3 +37,6 @@ kardsliker/forge/card_forge_exports/
 dev-tools/
 
 kardsliker/projects/
+
+# DeepSeek API Key
+APIKEY.txt
