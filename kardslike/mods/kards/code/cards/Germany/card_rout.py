@@ -19,9 +19,9 @@ def action(card, event, ground):
     player = event.player
 
     def apply(target):
-        if target is not None:
+        if target is not None and target.cost <= 2:
             template = __import__("main").cards.create("kards:card_rout_unit")
-            ground.transform_unit(target, template)
+            ground.transform_unit(target, template, source=card)
 
     ground.request_target(player, card, target_valid, apply)
 

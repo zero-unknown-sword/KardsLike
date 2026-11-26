@@ -545,6 +545,16 @@ class EventType(IntEnum):
         at: 攻击力增量
         df: 防御力增量
     """
+    TRANSFORM = pygame.event.custom_type()
+    """
+    单位转换
+
+    数据:
+        card: 转换后的卡牌
+        target: 被转换的原卡牌
+        source: 触发转换的来源
+        player: 控制者
+    """
     CHOICE_RESOLVED = pygame.event.custom_type()
     """
     三选一结算
@@ -3077,6 +3087,8 @@ class BattleGround:
         """
         if player is not self.turn_owner:
             return False
+        if card.is_unit and getattr(self, "deploy_lock", {}).get(player) == self.turn_count:
+            return False
         if self.pending_selection is not None:
             return False
         if self.pending_choice is not None:
@@ -4087,7 +4099,7 @@ class BattleGround:
         card.zone = Zone.HAND
         self.kredits[player].credits = min(self.kredits[player].credits + cost, self.kredits[player].slots)
 
-    def transform_unit(self, unit: Card, template: Card) -> Card | None:
+    def transform_unit(self, unit: Card, template: Card, source: Card | None = None) -> Card | None:
         """把单位转换为模板的原始状态，保留战线位置和控制者。"""
         line = unit.line
         if line is None or not template.card_id:
@@ -4107,6 +4119,15 @@ class BattleGround:
         replacement.moved_turn = unit.moved_turn
         replacement.attacked_turn = unit.attacked_turn
         line.units[index] = replacement
+        self.emit(
+            Event(
+                EventType.TRANSFORM,
+                card=replacement,
+                target=unit,
+                source=source if source is not None else template,
+                player=replacement.controller,
+            )
+        )
         return replacement
 
     def remove_unit(self, card: Card, source: Card) -> None:

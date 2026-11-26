@@ -6,9 +6,9 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from main import CardData, CardType, Country, Rarity
+from main import BattleGround, Card, CardData, CardType, Country, Event, EventType, Procedure, Rarity, Zone
 
-from main import CardData, CardType, Country, Rarity
+from main import BattleGround, Card, CardData, CardType, Country, Event, EventType, Procedure, Rarity, Zone
 from mods.kards.code.keywords.blitz import KEYWORD as BLITZ
 
 CARD_DATA = CardData(
@@ -23,4 +23,11 @@ CARD_DATA = CardData(
     df=4,
     operation_cost=2,
     keywords=[BLITZ],
+    procedures=[
+        Procedure(
+            EventType.TURN_END,
+            lambda card, event, ground: card.zone is Zone.BOARD and event.player is card.controller,
+            lambda card, event, ground: card.return_hand(card, ground),
+        )
+    ],
 )

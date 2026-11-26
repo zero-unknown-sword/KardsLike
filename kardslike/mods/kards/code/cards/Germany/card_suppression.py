@@ -22,7 +22,7 @@ def action(card, event, ground):
         if target is None:
             return
         ground.suppress(target)
-        if any(unit.type.name in {"FIGHTER", "BOMBER"} for unit in ground.all_targets() if unit.controller is player):
+        if any(unit.type.name in {"FIGHTER", "BOMBER"} and unit.controller is player for unit in ground.all_targets()):
             ground.draw(player, card)
 
     ground.request_target(player, card, target_valid, apply)

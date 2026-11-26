@@ -9,6 +9,7 @@ if str(_ROOT) not in sys.path:
 from main import CardData, CardType, Country, Rarity
 
 from main import BattleGround, Card, Event, EventType, Procedure
+from mods.kards.code.weather import add_end_cleanup
 
 
 def target_valid(target, player, ground):
@@ -20,6 +21,9 @@ def action(card, event, ground):
 
     def apply(target):
         if target is not None:
+            old_cost = target.cost
+            target.cost = 0
+            add_end_cleanup(ground, player, lambda: setattr(target, "cost", old_cost))
             card.return_hand(target, ground)
 
     ground.request_target(player, card, target_valid, apply)

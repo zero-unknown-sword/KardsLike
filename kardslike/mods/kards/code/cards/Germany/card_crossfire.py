@@ -22,11 +22,16 @@ CARD_DATA = CardData(
         Procedure(
             EventType.USE,
             lambda card, event, ground: event.dict.get("source") is card,
-            lambda card, event, ground: [
-                ground.damage(unit, 2, card, DamageType.NONE)
-                for unit in list(ground.all_targets())
-                if unit.is_unit and unit.controller is not event.player
-            ][:2],
+            lambda card, event, ground: _crossfire(card, event, ground),
         )
     ],
 )
+
+
+def _crossfire(card, event, ground):
+    targets = [
+        unit for unit in ground.all_targets()
+        if unit.is_unit and unit.controller is not event.player
+    ][:2]
+    for unit in targets:
+        ground.damage(unit, 2, card, DamageType.NONE)

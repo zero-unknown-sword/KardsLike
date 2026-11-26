@@ -14,6 +14,9 @@ from main import BattleGround, Card, DamageType, Event, EventType, Procedure
 def action(card, event, ground):
     enemy = event.player.opponent
     ground.damage(ground.hqs[enemy], 4, card, DamageType.NONE)
+    locks = getattr(ground, "deploy_lock", {})
+    locks[enemy] = ground.turn_count + 1
+    ground.deploy_lock = locks
 
 
 CARD_DATA = CardData(
