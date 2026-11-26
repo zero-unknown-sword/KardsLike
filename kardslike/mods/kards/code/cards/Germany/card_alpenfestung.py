@@ -13,7 +13,10 @@ from main import BattleGround, Card, Event, EventType, Procedure
 
 def action(card, event, ground):
     player = event.player
-    ground.hqs[player].df = 25
+    hq = ground.hqs[player]
+    hq.df = 25
+    hq.max_df = 25
+    hq._df.set(25)
     deck = ground.decks[player]
     for _ in range(10):
         if deck.cards:

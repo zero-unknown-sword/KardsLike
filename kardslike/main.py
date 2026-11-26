@@ -1605,7 +1605,7 @@ class Kredit:
     """指挥点槽上限"""
     NATURAL_MAX: int = 12
     """自然增长能达到的槽数上限"""
-    START_SLOTS: int = 12
+    START_SLOTS: int = 0
     """初始槽数"""
 
     def __init__(self) -> None:
@@ -2161,6 +2161,8 @@ class BattleGround:
         """双方指挥点"""
         self.pending_turn_draws: dict[Player, int] = {Player.A: 0, Player.B: 0}
         """回合开始额外抽牌数"""
+        self.pending_turn_start: dict[Player, list[Any]] = {Player.A: [], Player.B: []}
+        """下个回合开始时执行的回调"""
         self.turns_taken: dict[Player, int] = {Player.A: 0, Player.B: 0}
         """双方已进行回合数"""
         self.discards: dict[Player, list[Card]] = {Player.A: [], Player.B: []}
@@ -2780,6 +2782,10 @@ class BattleGround:
             self.pending_turn_draws[player] = 0
             for _ in range(extra):
                 self.draw(player, special_source)
+        callbacks = self.pending_turn_start[player]
+        self.pending_turn_start[player] = []
+        for callback in callbacks:
+            callback()
 
     def end_turn(self) -> None:
         """结束当前回合, 移交回合权并开始对方回合并检查胜负"""
@@ -4518,8 +4524,14 @@ class BattleGround:
             if counter_damage >= card.df:
                 ambush_immune = True
         self.emit(Event(EventType.ATTACK, card=card, target=target, player=player))
+        attack_at = card.at
+        if (
+            card.card_id == "kards:card_henschel_hs_129"
+            and (target.is_hq or target.type in (CardType.INFANTRY, CardType.ARTILLERY, CardType.TANK))
+        ):
+            attack_at += 2
         if not ambush_immune:
-            self.damage(target, card.at, card, kind)
+            self.damage(target, attack_at, card, kind)
         if (
             target.zone is Zone.DISCARD
             and card.has_tag(CardTag.OVERFLOW_DAMAGE)

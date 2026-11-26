@@ -13,8 +13,12 @@ from main import BattleGround, Card, CardType, Country, Event, EventType, Proced
 
 def action(card, event, ground):
     player = event.player
-    ground.kredits[player].credits += 10
-    ground.draw(player, card)
+
+    def next_turn() -> None:
+        ground.kredits[player].credits += 10
+        ground.draw(player, card)
+
+    ground.pending_turn_start[player].append(next_turn)
 
 
 CARD_DATA = CardData(
