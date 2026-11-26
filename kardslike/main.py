@@ -9330,7 +9330,7 @@ class CardBrowser:
             return
         DECK_DIR.mkdir(parents=True, exist_ok=True)
         path = DECK_DIR / f"{deck.name}.json"
-        data = {
+        data: dict[str, Any] = {
             "name": deck.name,
             "main": deck.main_country.name.title(),
             "ally": deck.ally_country.name.title() if deck.ally_country else None,
