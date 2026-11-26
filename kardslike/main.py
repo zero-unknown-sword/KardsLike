@@ -5748,7 +5748,7 @@ class AIController:
         support = ground.support_lines[opponent]
         path = publish_state(ground, opponent)
         logger.info("等待对话 AI 动作: %s", path)
-        action = wait_action(300.0)
+        action = wait_action(10.0)
         if not isinstance(action, dict):
             logger.info("对话 AI 超时, 结束回合")
             ground.end_turn()
@@ -5783,10 +5783,18 @@ class AIController:
                 attacker_index = int(action.get("attacker", -1))
             except (TypeError, ValueError):
                 attacker_index = -1
-            if not 0 <= attacker_index < len(support.units):
+            attacker_line = str(action.get("attacker_line", "support"))
+            if attacker_line == "front":
+                if ground.front_line.owner is not opponent:
+                    ground.end_turn()
+                    return
+                attackers = ground.front_line.units
+            else:
+                attackers = support.units
+            if not 0 <= attacker_index < len(attackers):
                 ground.end_turn()
                 return
-            attacker = support.units[attacker_index]
+            attacker = attackers[attacker_index]
             target_name = str(action.get("target", ""))
             target: Card | None = None
             if target_name == "hq":
