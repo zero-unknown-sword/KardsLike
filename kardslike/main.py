@@ -912,6 +912,7 @@ class Card:
         tags: list[str] | None = None,
         card_id: str = "",
         sub_type: str = "",
+        rarity: Rarity = Rarity.STANDARD,
     ) -> None:
         """
         创建卡牌
@@ -938,6 +939,7 @@ class Card:
         self.type: CardType = type
         self.card_id: str = card_id
         self.sub_type: str = sub_type
+        self.rarity: Rarity = rarity
         self.last_trigger_turn: int = -1
         self._cost: IntAttr = IntAttr(cost, "cost", self)
         self.name: str = name
@@ -1935,6 +1937,7 @@ def build_card(data: CardData) -> Card:
         tags=list(data.tags),
         card_id=data.card_id,
         sub_type=data.sub_type,
+        rarity=data.rare if isinstance(data.rare, Rarity) else Rarity.STANDARD,
     )
 
 # ==================== 战斗核心 ====================
@@ -5244,6 +5247,9 @@ SCENE_START: str = "start"
 SCENE_BATTLE: str = "battle"
 SCENE_CARDS: str = "cards"
 
+START_HOME_RECT = pygame.Rect(40, 40, 120, 48)
+START_CARD_RECT = pygame.Rect(40, 104, 120, 48)
+
 # 开始界面选项
 START_OPTIONS: list[str] = ["乱斗", "赛事", "竞技场", "战区", "战斗代码", "对战模式"]
 
@@ -5265,7 +5271,7 @@ class Status:
     """是否暂停"""
     quitting: bool = False
     """是否正在退出"""
-    scene: str = SCENE_MENU
+    scene: str = SCENE_START
     """当前场景"""
 
 
@@ -5563,7 +5569,7 @@ def draw_menu(
     )
 
 
-def draw_start(screen: Surface, background: Surface, button_group: ButtonGroup) -> None:
+def draw_start(screen: Surface, background: Surface, button_group: ButtonGroup, font: Font) -> None:
     """
     绘制开始界面场景
 
@@ -5571,8 +5577,17 @@ def draw_start(screen: Surface, background: Surface, button_group: ButtonGroup) 
         screen: 屏幕 Surface
         background: 背景图
         button_group: 选项按钮组
+        font: 导航文字字体
     """
     screen.blit(background, (0, 0))
+    for rect, label, active in (
+        (START_HOME_RECT, "开始", True),
+        (START_CARD_RECT, "卡组", False),
+    ):
+        pygame.draw.rect(screen, (74, 84, 66) if active else (42, 48, 42), rect, border_radius=6)
+        pygame.draw.rect(screen, (205, 190, 140), rect, 2, border_radius=6)
+        text = font.render(label, True, (235, 228, 200))
+        screen.blit(text, text.get_rect(center=rect.center))
     button_group.update()
     button_group.draw(screen)
 
@@ -9081,9 +9096,9 @@ class CardBrowser:
         """绘制左侧主导航。"""
         for rect, label in (
             (self.side_start, "开始"),
-            (self.side_cards, "卡牌"),
+            (self.side_cards, "卡组"),
         ):
-            active = label == "卡牌"
+            active = label == "卡组"
             color = (70, 78, 65) if active else (40, 45, 40)
             if rect.collidepoint(mouse) and not active:
                 color = (58, 65, 56)
@@ -9309,6 +9324,22 @@ class CardBrowser:
             self.pool_rects.append((rect, card))
         return max_scroll
 
+    def _save_deck(self, deck: Deck) -> None:
+        """把当前卡组保存到卡组目录。"""
+        if not deck.name:
+            return
+        DECK_DIR.mkdir(parents=True, exist_ok=True)
+        path = DECK_DIR / f"{deck.name}.json"
+        data = {
+            "name": deck.name,
+            "main": deck.main_country.name.title(),
+            "ally": deck.ally_country.name.title() if deck.ally_country else None,
+            "cards": [card.card_id for card in deck.cards],
+        }
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        DECKS[deck.name] = [card.card_id for card in deck.cards]
+        logger.info("卡组已保存: %s (%s 张)", path, len(deck.cards))
+
     def _draw_deck_editor(self, screen: Surface, mouse: tuple[int, int]) -> None:
         """卡组编辑界面: 左侧卡池, 右侧卡组概览。"""
         deck = self.edit_deck
@@ -9363,39 +9394,31 @@ class CardBrowser:
         self.filter_rects = []
         self._center_text(screen, "筛选器", (panel.centerx, panel.y + 24), (230, 215, 175), self.font)
 
+        type_options: list[tuple[str, object]] = [("全部", None)]
+        for label, value in (
+            ("步兵", "infantry"), ("坦克", "tank"), ("炮兵", "artillery"),
+            ("战斗", "fighter"), ("轰炸", "bomber"), ("指令", "order"),
+            ("反制", "countermeasure"),
+        ):
+            type_options.append((label, value))
+        country_options: list[tuple[str, object]] = [("全部", None)]
+        for label, country in (
+            ("德", Country.GERMANY), ("英", Country.BRITAIN),
+            ("苏", Country.SOVIET), ("美", Country.USA),
+            ("日", Country.JAPAN), ("法", Country.FRANCE),
+            ("意", Country.ITALY), ("波", Country.POLAND),
+            ("芬", Country.FINLAND), ("澳", Country.ANZAC),
+            ("中立", Country.NEUTRAL),
+        ):
+            country_options.append((label, country))
+        rarity_options: list[tuple[str, object]] = [
+            ("全部", None), ("普通", "standard"), ("限定", "limited"),
+            ("特殊", "special"), ("精英", "elite"),
+        ]
         sections: list[tuple[str, list[tuple[str, object]]]] = [
-            (
-                "类型",
-                [("全部", None)]
-                + [
-                    (label, value)
-                    for label, value in (
-                        ("步兵", "infantry"), ("坦克", "tank"), ("炮兵", "artillery"),
-                        ("战斗", "fighter"), ("轰炸", "bomber"), ("指令", "order"),
-                        ("反制", "countermeasure"),
-                    )
-                ],
-            ),
-            (
-                "国家",
-                [("全部", None)]
-                + [
-                    (label, country)
-                    for label, country in (
-                        ("德", Country.GERMANY), ("英", Country.BRITAIN),
-                        ("苏", Country.SOVIET), ("美", Country.USA),
-                        ("日", Country.JAPAN), ("法", Country.FRANCE),
-                        ("意", Country.ITALY), ("波", Country.POLAND),
-                        ("芬", Country.FINLAND), ("澳", Country.ANZAC),
-                        ("中立", Country.NEUTRAL),
-                    )
-                ],
-            ),
-            (
-                "稀有度",
-                [("全部", None)]
-                + [("普通", "standard"), ("限定", "limited"), ("特殊", "special"), ("精英", "elite")],
-            ),
+            ("类型", type_options),
+            ("国家", country_options),
+            ("稀有度", rarity_options),
         ]
         current_values: dict[str, object] = {
             "类型": self.filter_type,
@@ -9470,7 +9493,12 @@ class CardBrowser:
 
     def handle_event(self, event: Event, screen: Surface) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.tab_deck.collidepoint(event.pos):
+            if self.side_start.collidepoint(event.pos):
+                Global.status.scene = SCENE_START
+            elif self.side_cards.collidepoint(event.pos):
+                self.mode = "deck"
+                self.edit_deck = None
+            elif self.tab_deck.collidepoint(event.pos):
                 self.mode = "deck"
                 self.edit_deck = None
                 self.scroll = 0
@@ -9479,10 +9507,12 @@ class CardBrowser:
                 self.pool_scroll = 0
             elif self.back_rect.collidepoint(event.pos):
                 if self.mode == "deck_edit":
+                    if self.edit_deck is not None:
+                        self._save_deck(self.edit_deck)
                     self.mode = "deck"
                     self.edit_deck = None
                 else:
-                    Global.status.scene = SCENE_MENU
+                    Global.status.scene = SCENE_START
             elif self.mode == "deck":
                 for index, (rect, _) in enumerate(self.card_rects):
                     if rect.collidepoint(event.pos):
@@ -9494,6 +9524,8 @@ class CardBrowser:
                     self.pool_scroll = 0
             elif self.mode == "deck_edit":
                 if self.complete_rect.collidepoint(event.pos):
+                    if self.edit_deck is not None:
+                        self._save_deck(self.edit_deck)
                     self.mode = "deck"
                     self.edit_deck = None
                     return
@@ -9599,7 +9631,10 @@ def loop(
             if Global.status.scene == SCENE_MENU:
                 handle_menu_click(event.pos, start_rect, card_rect)
             elif Global.status.scene == SCENE_START:
-                button_group.handle_event(event)
+                if START_CARD_RECT.collidepoint(event.pos):
+                    Global.status.scene = SCENE_CARDS
+                else:
+                    button_group.handle_event(event)
             elif Global.status.scene == SCENE_CARDS:
                 if Global.card_browser is not None:
                     Global.card_browser.handle_event(event, screen)
@@ -9643,7 +9678,7 @@ def loop(
             card_rect,
         )
     elif Global.status.scene == SCENE_START:
-        draw_start(screen, background, button_group)
+        draw_start(screen, background, button_group, font)
     elif Global.status.scene == SCENE_CARDS:
         if Global.card_browser is not None:
             Global.card_browser.draw(screen)
