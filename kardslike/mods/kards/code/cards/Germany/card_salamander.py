@@ -35,7 +35,13 @@ CARD_DATA = CardData(
 def _salamander_after_attack(card, ground):
     player = card.controller
     ground.remove_unit(card, card)
+
     def back() -> None:
-        if not ground.add_unit(player, card):
-            ground.move_to_hand(card, player)
+        if ground.add_unit(player, card):
+            return
+        if len(ground.hands[player].cards) < ground.hands[player].MAX_CARDS:
+            if ground.move_to_hand(card, player):
+                return
+        ground.pending_turn_start[player].append(back)
+
     ground.pending_turn_start[player].append(back)
