@@ -5247,8 +5247,8 @@ SCENE_START: str = "start"
 SCENE_BATTLE: str = "battle"
 SCENE_CARDS: str = "cards"
 
-START_HOME_RECT = pygame.Rect(40, 40, 120, 48)
-START_CARD_RECT = pygame.Rect(40, 104, 120, 48)
+START_HOME_RECT = pygame.Rect(18, 130, 118, 92)
+START_CARD_RECT = pygame.Rect(18, 238, 118, 92)
 
 # 开始界面选项
 START_OPTIONS: list[str] = ["乱斗", "赛事", "竞技场", "战区", "战斗代码", "对战模式"]
@@ -9264,6 +9264,94 @@ class CardBrowser:
             result.append(card)
         return result
 
+    def _copy_limit(self, card: Card) -> int:
+        """按稀有度返回同名卡携带上限。"""
+        return {
+            Rarity.ELITE: 1,
+            Rarity.SPECIAL: 2,
+            Rarity.LIMITED: 3,
+            Rarity.STANDARD: 4,
+        }.get(card.rarity, 0)
+
+    def _deck_pool_cards(self) -> list[Card]:
+        """返回卡组编辑卡池: 主国 + 盟国非精英, 每种同名卡一张。"""
+        deck = self.edit_deck
+        if deck is None:
+            return []
+        ally = deck.ally_country or deck.main_country
+        seen: set[str] = set()
+        result: list[Card] = []
+        for card in self._current_cards():
+            data = cards.get(card.card_id)
+            if data is None:
+                continue
+            rarity = data.rare if isinstance(data.rare, Rarity) else Rarity.STANDARD
+            if rarity is Rarity.NONE:
+                continue
+            allowed_country = deck_country(data, deck.main_country, ally)
+            if allowed_country not in (deck.main_country, ally):
+                continue
+            if allowed_country is ally and rarity is Rarity.ELITE:
+                continue
+            if self.filter_cost is not None:
+                if self.filter_cost >= 7:
+                    if card.cost < 7:
+                        continue
+                elif card.cost != self.filter_cost:
+                    continue
+            if self.filter_type is not None and card.type.name.lower() != self.filter_type:
+                continue
+            name = data.display_name or data.name
+            if name in seen:
+                continue
+            seen.add(name)
+            result.append(card)
+        return result
+
+    def _draw_pool_card(self, screen: Surface, card: Card, rect: pygame.Rect) -> None:
+        """绘制带当前数值覆盖的卡牌缩略图。"""
+        art = self._art(card)
+        if art is not None:
+            screen.blit(pygame.transform.smoothscale(art, rect.size), rect)
+        else:
+            pygame.draw.rect(screen, (45, 48, 40), rect, border_radius=4)
+            self._center_text(screen, card.display_name, rect.center, (230, 225, 200), self.small)
+        pygame.draw.rect(screen, (150, 140, 105), rect, 2, border_radius=4)
+        stats = (
+            ("CT", card.cost, (rect.x + 3, rect.y + 3)),
+            ("AT", card.at, (rect.x + 3, rect.bottom - 21)),
+            ("DF", card.df, (rect.right - 25, rect.bottom - 21)),
+        )
+        for label, value, position in stats:
+            if label != "CT" and not card.type.is_unit:
+                continue
+            box = pygame.Rect(position[0], position[1], 22, 18)
+            pygame.draw.rect(screen, (24, 27, 23), box, border_radius=2)
+            self._center_text(screen, str(value), box.center, (245, 235, 200), self.small)
+
+    def _draw_copy_limit(self, screen: Surface, rect: pygame.Rect, limit: int) -> None:
+        """绘制卡牌下方的携带上限小矩形。"""
+        bar = pygame.Rect(rect.x, rect.bottom + 3, rect.width, 12)
+        pygame.draw.rect(screen, (34, 39, 34), bar, border_radius=3)
+        box_w = 8
+        total = max(1, limit) * box_w + max(0, limit - 1) * 3
+        x = bar.centerx - total // 2
+        for _ in range(limit):
+            box = pygame.Rect(x, bar.y + 2, box_w, 8)
+            pygame.draw.rect(screen, (196, 183, 139), box, border_radius=1)
+            x += box_w + 3
+
+    def _card_top_bar(self, card: Card, size: tuple[int, int]) -> Surface:
+        """截取卡面顶部作为卡组概览缩略图。"""
+        art = self._art(card)
+        if art is not None and art.get_height() > 10:
+            crop_height = max(20, int(art.get_height() * 0.19))
+            crop = art.subsurface(pygame.Rect(0, 0, art.get_width(), crop_height)).copy()
+            return pygame.transform.smoothscale(crop, size)
+        surface = pygame.Surface(size, pygame.SRCALPHA)
+        surface.fill((52, 58, 48))
+        return surface
+
     def _draw_top_filters(self, screen: Surface, mouse: tuple[int, int], y: int) -> None:
         """绘制费用筛选条。"""
         self.top_filter_rects = []
@@ -9290,38 +9378,33 @@ class CardBrowser:
         area: pygame.Rect,
         scroll: int,
         mouse: tuple[int, int],
+        cols: int = 5,
+        show_limits: bool = False,
     ) -> int:
         """绘制可滚动的卡牌池, 返回最大滚动行数。"""
         self.pool_rects = []
         gap = 8
-        cols = max(3, (area.width + gap) // (112 + gap))
+        cols = max(1, cols)
         cell_w = (area.width - gap * (cols - 1)) // cols
-        cell_h = int(cell_w * 702 / 500)
+        if cols == 3:
+            cell_w = min(cell_w, 250)
+        card_h = int(cell_w * 702 / 500)
+        cell_h = card_h + (20 if show_limits else 0)
         rows = max(1, (area.height + gap) // (cell_h + gap))
         max_scroll = max(0, (len(cards) + cols - 1) // cols - rows)
         start = max(0, min(scroll, max_scroll)) * cols
         for index, card in enumerate(cards[start : start + rows * cols]):
             row, col = divmod(index, cols)
-            rect = pygame.Rect(
+            cell = pygame.Rect(
                 area.x + col * (cell_w + gap),
                 area.y + row * (cell_h + gap),
                 cell_w,
-                cell_h,
+                card_h,
             )
-            art = self._art(card)
-            if art is not None:
-                screen.blit(pygame.transform.smoothscale(art, rect.size), rect)
-            else:
-                pygame.draw.rect(screen, (45, 48, 40), rect, border_radius=4)
-                self._center_text(screen, card.display_name, rect.center, (230, 225, 200), self.small)
-            pygame.draw.rect(
-                screen,
-                (220, 190, 110) if rect.collidepoint(mouse) else (150, 140, 105),
-                rect,
-                2,
-                border_radius=4,
-            )
-            self.pool_rects.append((rect, card))
+            self._draw_pool_card(screen, card, cell)
+            if show_limits:
+                self._draw_copy_limit(screen, cell, self._copy_limit(card))
+            self.pool_rects.append((cell, card))
         return max_scroll
 
     def _save_deck(self, deck: Deck) -> None:
@@ -9345,7 +9428,7 @@ class CardBrowser:
         deck = self.edit_deck
         if deck is None:
             return
-        current = self._filtered_cards()
+        current = self._deck_pool_cards()
         self._center_text(
             screen,
             f"卡组编辑：{deck.name}    {len(deck.cards)} / {Deck.SIZE}",
@@ -9355,32 +9438,55 @@ class CardBrowser:
         )
         self._draw_top_filters(screen, mouse, 110)
         area = pygame.Rect(170, 160, screen.get_width() - 540, screen.get_height() - 230)
-        max_scroll = self._draw_card_grid(screen, current, area, self.pool_scroll, mouse)
+        max_scroll = self._draw_card_grid(
+            screen, current, area, self.pool_scroll, mouse, cols=3, show_limits=True
+        )
         self.pool_scroll = min(self.pool_scroll, max_scroll)
 
         panel = pygame.Rect(screen.get_width() - 350, 110, 326, screen.get_height() - 180)
         pygame.draw.rect(screen, (31, 36, 32), panel, border_radius=8)
         pygame.draw.rect(screen, (100, 95, 74), panel, 1, border_radius=8)
+        self._center_text(screen, "卡组概览", (panel.centerx, panel.y + 18), (230, 215, 175), self.font)
         self.deck_rows = []
-        row_y = panel.y + 16
-        sorted_cards = sorted(deck.cards, key=lambda item: (item.cost, item.display_name))
-        visible = max(1, (panel.height - 110) // 36)
+        grouped: dict[str, tuple[Card, int]] = {}
+        for card in deck.cards:
+            key = card.display_name or card.name
+            if key in grouped:
+                grouped[key] = (grouped[key][0], grouped[key][1] + 1)
+            else:
+                grouped[key] = (card, 1)
+        sorted_cards = sorted(grouped.values(), key=lambda item: (item[0].cost, item[0].display_name))
+        row_h = 30
+        visible = max(1, (panel.height - 130) // row_h)
         self.edit_scroll = max(0, min(self.edit_scroll, max(0, len(sorted_cards) - visible)))
-        for card in sorted_cards[self.edit_scroll : self.edit_scroll + visible]:
-            rect = pygame.Rect(panel.x + 12, row_y, panel.width - 24, 34)
+        row_y = panel.y + 34
+        for card, count in sorted_cards[self.edit_scroll : self.edit_scroll + visible]:
+            rect = pygame.Rect(panel.x + 10, row_y, panel.width - 20, row_h - 2)
             pygame.draw.rect(
                 screen,
                 (54, 62, 52) if rect.collidepoint(mouse) else (43, 49, 42),
                 rect,
                 border_radius=4,
             )
-            label = f"{card.cost}  {card.display_name}"
-            while self.small.size(label)[0] > rect.width - 16 and len(label) > 4:
+            thumb = self._card_top_bar(card, (84, 24))
+            screen.blit(thumb, (rect.x + 3, rect.y + 2))
+            label = card.display_name or card.name
+            while self.small.size(label)[0] > rect.width - 130 and len(label) > 4:
                 label = label[:-4] + "..."
             text = self.small.render(label, True, (220, 215, 190))
-            screen.blit(text, (rect.x + 8, rect.centery - text.get_height() // 2))
+            screen.blit(text, (rect.x + 94, rect.centery - text.get_height() // 2))
+            count_text = self.small.render(f"x{count}", True, (240, 225, 175))
+            screen.blit(count_text, (rect.right - count_text.get_width() - 8, rect.centery - count_text.get_height() // 2))
             self.deck_rows.append((rect, card))
-            row_y += 36
+            row_y += row_h
+        if len(sorted_cards) > visible:
+            self._center_text(
+                screen,
+                f"{self.edit_scroll + 1}/{max(1, len(sorted_cards) - visible + 1)}  滚轮",
+                (panel.centerx, panel.bottom - 64),
+                (150, 150, 135),
+                self.small,
+            )
         self.complete_rect = pygame.Rect(panel.right - 130, panel.bottom - 52, 116, 36)
         pygame.draw.rect(screen, (95, 105, 82), self.complete_rect, border_radius=5)
         pygame.draw.rect(screen, (205, 190, 140), self.complete_rect, 1, border_radius=5)
@@ -9462,7 +9568,8 @@ class CardBrowser:
     def draw(self, screen: Surface) -> None:
         screen.fill((18, 22, 20))
         mouse = pygame.mouse.get_pos()
-        self._draw_sidebar(screen, mouse)
+        if self.mode != "deck_edit":
+            self._draw_sidebar(screen, mouse)
         for rect, label, mode in (
             (self.tab_deck, "卡组", "deck"),
             (self.tab_collection, "收藏", "collection"),
@@ -9493,9 +9600,9 @@ class CardBrowser:
 
     def handle_event(self, event: Event, screen: Surface) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.side_start.collidepoint(event.pos):
+            if self.mode != "deck_edit" and self.side_start.collidepoint(event.pos):
                 Global.status.scene = SCENE_START
-            elif self.side_cards.collidepoint(event.pos):
+            elif self.mode != "deck_edit" and self.side_cards.collidepoint(event.pos):
                 self.mode = "deck"
                 self.edit_deck = None
             elif self.tab_deck.collidepoint(event.pos):
@@ -9537,7 +9644,12 @@ class CardBrowser:
                 if self.edit_deck is not None:
                     for rect, card in self.pool_rects:
                         if rect.collidepoint(event.pos):
-                            if len(self.edit_deck.cards) < Deck.SIZE:
+                            limit = self._copy_limit(card)
+                            same_name = sum(
+                                1 for item in self.edit_deck.cards
+                                if (item.display_name or item.name) == (card.display_name or card.name)
+                            )
+                            if len(self.edit_deck.cards) < Deck.SIZE and same_name < limit:
                                 copy = cards.create(card.card_id)
                                 copy.owner = Player.A
                                 copy.controller = Player.A
