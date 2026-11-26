@@ -3298,7 +3298,7 @@ class BattleGround:
         self,
         player: Player,
         source: Card,
-        valid: Callable[[Card], bool],
+        valid: Callable[..., bool],
         callback: Callable[[Card], None],
         cancel: Callable[[], None] | None = None,
     ) -> None:
@@ -3316,15 +3316,15 @@ class BattleGround:
             needs_context = len(inspect.signature(valid).parameters) >= 3
         except (TypeError, ValueError):
             needs_context = True
-        wrapped = (
-            (lambda target: valid(target, player, self))
-            if needs_context
-            else valid
-        )
+        def wrapped_target(target: Card) -> bool:
+            if needs_context:
+                return bool(valid(target, player, self))
+            return bool(valid(target))
+
         self.pending_target = PendingTarget(
             player,
             source,
-            wrapped,
+            wrapped_target,
             callback,
             cancel,
         )
