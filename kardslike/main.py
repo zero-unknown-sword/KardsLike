@@ -2255,6 +2255,7 @@ class BattleGround:
             self.kredits[player].credits = 0
         self.kredits[self.first_player].slots = 1
         self.kredits[self.first_player].credits = 1
+        self.turn_owner = self.first_player
         self.turns_taken[self.first_player] = 1
         start_event = pygame.event.Event(
             BATTLE_START,
@@ -8105,8 +8106,16 @@ class BattleUI:
             "我方",
         )
         self._place_end_button()
-        self.end_button.update()
-        screen.blit(self.end_button.image, self.end_button.rect)
+        active = ground.turn_owner is Player.A
+        if active:
+            self.end_button.update()
+            screen.blit(self.end_button.image, self.end_button.rect)
+        else:
+            image = self.end_button.image.copy()
+            shade = pygame.Surface(image.get_size(), pygame.SRCALPHA)
+            shade.fill((0, 0, 0, 145))
+            image.blit(shade, (0, 0))
+            screen.blit(image, self.end_button.rect)
         self._draw_notice(screen, ground)
 
     def _draw_notice(self, screen: Surface, ground: BattleGround) -> None:
