@@ -34,13 +34,18 @@ CARD_DATA = CardData(
 
 def _salamander_after_attack(card, ground):
     player = card.controller
+    line = card.line
+    index = line.units.index(card) if line is not None else None
     ground.remove_unit(card, card)
 
     def back() -> None:
+        # 返回战场时优先回到原战线/原位置；绝不回手。
+        if line is not None and ground.add_unit(player, card, index=index, line=line):
+            return
         if ground.add_unit(player, card):
             return
-        if len(ground.hands[player].cards) < ground.hands[player].MAX_CARDS:
-            if ground.move_to_hand(card, player):
+        if line is not None and line.kind.name == "FRONT":
+            if ground.add_unit(player, card, line=ground.support_lines[player]):
                 return
         ground.pending_turn_start[player].append(back)
 
