@@ -93,19 +93,27 @@ def publish_state(ground: "BattleGround", player: "Player") -> Path:
     return STATE_FILE
 
 
+def read_action() -> dict[str, Any] | None:
+    """非阻塞读取一次动作，没有则立即返回 None。"""
+    if not ACTION_FILE.is_file():
+        return None
+    try:
+        raw = json.loads(ACTION_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if isinstance(raw, dict):
+        ACTION_FILE.unlink(missing_ok=True)
+        return raw
+    return None
+
+
 def wait_action(timeout: float = 10.0) -> dict[str, Any] | None:
-    """等待外部写入 action.json。"""
+    """等待外部写入 action.json。阻塞版本，供 CLI/调试使用。"""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if ACTION_FILE.is_file():
-            try:
-                raw = json.loads(ACTION_FILE.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                time.sleep(0.2)
-                continue
-            if isinstance(raw, dict):
-                ACTION_FILE.unlink(missing_ok=True)
-                return raw
+        action = read_action()
+        if action is not None:
+            return action
         time.sleep(0.2)
     return None
 

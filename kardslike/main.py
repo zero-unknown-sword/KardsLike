@@ -36,7 +36,7 @@ if _PACKAGE_ROOT not in sys.path:
 
 from tools import BetterLogger, Button, ButtonGroup, Color, CrashReporter, ImageLoader, IntAttr, LogManager
 from llm_agent import DeepSeekPlanner
-from chat_bridge import publish_state, wait_action
+from chat_bridge import publish_state, read_action
 
 # 让动态加载的卡牌文件能通过 import main 拿到当前模块(避免重复导入)
 sys.modules["main"] = sys.modules[__name__]
@@ -5742,17 +5742,26 @@ class AIController:
     def __init__(self) -> None:
         self.llm: DeepSeekPlanner = DeepSeekPlanner()
         self.chat_mode: bool = os.environ.get("KARDSLIKE_CHAT_AI") == "1"
+        self.chat_waiting: bool = False
+        self.chat_deadline: float = 0.0
 
     def _chat_step(self, ground: BattleGround, opponent: Player) -> None:
-        """暂停 AI 回合, 等待对话 AI 写入动作。"""
+        """非阻塞对话 AI 步骤: 发布状态后每帧轮询动作。"""
         support = ground.support_lines[opponent]
-        path = publish_state(ground, opponent)
-        logger.info("等待对话 AI 动作: %s", path)
-        action = wait_action(10.0)
-        if not isinstance(action, dict):
-            logger.info("对话 AI 超时, 结束回合")
-            ground.end_turn()
+        if not self.chat_waiting:
+            path = publish_state(ground, opponent)
+            self.chat_waiting = True
+            self.chat_deadline = time.monotonic() + 10.0
+            logger.info("等待对话 AI 动作: %s", path)
             return
+        action = read_action()
+        if action is None:
+            if time.monotonic() >= self.chat_deadline:
+                self.chat_waiting = False
+                logger.info("对话 AI 超时, 结束回合")
+                ground.end_turn()
+            return
+        self.chat_waiting = False
         if action.get("type") == "end":
             ground.end_turn()
             return
