@@ -5752,7 +5752,7 @@ class AIController:
         if not self.chat_waiting:
             path = publish_state(ground, opponent)
             self.chat_waiting = True
-            self.chat_deadline = time.monotonic() + 10.0
+            self.chat_deadline = time.monotonic() + 120.0
             logger.info("等待对话 AI 动作: %s", path)
             return
         action = read_action()
