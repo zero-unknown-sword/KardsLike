@@ -18,9 +18,9 @@ CARD_DATA = CardData(
     display_name="4TP",
     text="闪击。攻击敌方 HQ 后消灭自身。",
     rare=Rarity.STANDARD,
-    at=1,
+    at=3,
     df=3,
-    operation_cost=3,
+    operation_cost=1,
     keywords=[BLITZ],
     procedures=[
         Procedure(

@@ -20,8 +20,8 @@ CARD_DATA = CardData(
     art="738_jger_regiment.png",
     rare=Rarity.LIMITED,
     at=1,
-    df=1,
-    operation_cost=2,
+    df=2,
+    operation_cost=1,
     keywords=[BLITZ],
     procedures=[
         Procedure(
