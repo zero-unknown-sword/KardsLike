@@ -33,6 +33,15 @@ def _unit_data(ground: "BattleGround", unit: "Card", index: int) -> dict[str, An
     }
 
 
+def reset_live() -> None:
+    """启动新游戏时清除上一局的等待标记。"""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    LIVE_FILE.write_text(
+        json.dumps({"turn": 0, "owner": "A", "waiting": False, "ready": False, "winner": None}),
+        encoding="utf-8",
+    )
+
+
 def publish_live(ground: "BattleGround", waiting: bool = False) -> None:
     """写入当前回合归属，供外部等待工具判断是否轮到 AI。"""
     owner = ground.turn_owner

@@ -36,7 +36,7 @@ if _PACKAGE_ROOT not in sys.path:
 
 from tools import BetterLogger, Button, ButtonGroup, Color, CrashReporter, ImageLoader, IntAttr, LogManager
 from llm_agent import DeepSeekPlanner
-from chat_bridge import publish_live, publish_state, read_action
+from chat_bridge import publish_live, publish_state, read_action, reset_live
 
 # 让动态加载的卡牌文件能通过 import main 拿到当前模块(避免重复导入)
 sys.modules["main"] = sys.modules[__name__]
@@ -10000,6 +10000,7 @@ def main() -> None:
     LogManager().setup()
     sys.excepthook = CrashReporter()
     logger.info("程序启动")
+    reset_live()
     load_mods()
     save = load_or_create_save()
     Global.save_data = save
