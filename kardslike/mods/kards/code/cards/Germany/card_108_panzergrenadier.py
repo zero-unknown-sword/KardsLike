@@ -6,9 +6,49 @@ _ROOT = Path(__file__).resolve().parents[5]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from main import BattleGround, Card, CardData, CardType, Country, EntryMethod, Event, EventType, Procedure, Rarity
+from main import (
+    BattleGround,
+    Card,
+    CardData,
+    CardType,
+    Country,
+    EntryMethod,
+    Event,
+    EventType,
+    Player,
+    Procedure,
+    Rarity,
+    cards,
+)
 
-from main import BattleGround, Card, CardData, CardType, Country, EntryMethod, Event, EventType, Procedure, Rarity
+
+def target_valid(target: Card, player: Player, ground: BattleGround) -> bool:
+    """目标为花费不大于 4 的敌方单位。"""
+    return (
+        target.is_unit
+        and target.controller is not player
+        and target.cost <= 4
+    )
+
+
+def _eighty_apply(card: Card, ground: BattleGround, target: Card) -> None:
+    """转换目标并使其撤退。"""
+    replacement = ground.transform_unit(
+        target,
+        cards.create("kards:card_rout_unit"),
+        source=card,
+    )
+    if replacement is not None:
+        ground.retreat_unit(replacement, card)
+
+
+def deploy_action(card: Card, event: Event, ground: BattleGround) -> None:
+    """部署时转换并撤退一个敌方单位。"""
+    def apply(target: Card) -> None:
+        _eighty_apply(card, ground, target)
+
+    ground.request_target(card.controller, card, target_valid, apply)
+
 
 CARD_DATA = CardData(
     type=CardType.INFANTRY,
@@ -24,22 +64,10 @@ CARD_DATA = CardData(
     procedures=[
         Procedure(
             EventType.USE,
-            lambda card, event, ground: event.card is card and event.method is EntryMethod.DEPLOY,
-            lambda card, event, ground: ground.request_target(
-                card.controller,
-                card,
-                lambda target: target.is_unit and target.controller is not card.controller and target.cost <= 4,
-                lambda target: _eighty_apply(card, ground, target),
+            lambda card, event, ground: (
+                event.card is card and event.method is EntryMethod.DEPLOY
             ),
+            deploy_action,
         )
     ],
 )
-
-def _eighty_apply(card, ground, target):
-    if target is None:
-        return
-    replacement = ground.transform_unit(
-        target, __import__("main").cards.create("kards:card_rout_unit"), source=card
-    )
-    if replacement is not None:
-        ground.retreat_unit(replacement, card)
