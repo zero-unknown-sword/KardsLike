@@ -36,7 +36,7 @@ if _PACKAGE_ROOT not in sys.path:
 
 from tools import BetterLogger, Button, ButtonGroup, Color, CrashReporter, ImageLoader, IntAttr, LogManager
 from llm_agent import DeepSeekPlanner
-from chat_bridge import publish_state, read_action
+from chat_bridge import publish_live, publish_state, read_action
 
 # 让动态加载的卡牌文件能通过 import main 拿到当前模块(避免重复导入)
 sys.modules["main"] = sys.modules[__name__]
@@ -5744,6 +5744,7 @@ class AIController:
         self.chat_mode: bool = os.environ.get("KARDSLIKE_CHAT_AI") == "1"
         self.chat_waiting: bool = False
         self.chat_deadline: float = 0.0
+        self.chat_live_key: tuple[int, str, str | None] | None = None
 
     def _chat_step(self, ground: BattleGround, opponent: Player) -> None:
         """非阻塞对话 AI 步骤: 发布状态后每帧轮询动作。"""
@@ -6641,7 +6642,17 @@ class BattleUI:
             dt: 距上一帧的毫秒数
         """
         ground = Global.battle_ground
-        if ground is None or ground.winner is not None:
+        if ground is None:
+            return
+        live_key = (
+            ground.turn_count,
+            ground.turn_owner.name,
+            ground.winner.name if ground.winner is not None else None,
+        )
+        if live_key != self.ai_controller.chat_live_key:
+            publish_live(ground, waiting=ground.turn_owner is Player.B)
+            self.ai_controller.chat_live_key = live_key
+        if ground.winner is not None:
             return
         if ground.pending_selection is not None:
             return

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 STATE_DIR = Path(__file__).resolve().parent / "chat_ai"
 STATE_FILE = STATE_DIR / "state.json"
 ACTION_FILE = STATE_DIR / "action.json"
+LIVE_FILE = STATE_DIR / "live.json"
 
 
 def _unit_data(ground: "BattleGround", unit: "Card", index: int) -> dict[str, Any]:
@@ -30,6 +31,20 @@ def _unit_data(ground: "BattleGround", unit: "Card", index: int) -> dict[str, An
         "type": unit.type.name.lower(),
         "text": unit.text,
     }
+
+
+def publish_live(ground: "BattleGround", waiting: bool = False) -> None:
+    """写入当前回合归属，供外部等待工具判断是否轮到 AI。"""
+    owner = ground.turn_owner
+    payload = {
+        "turn": ground.turn_count,
+        "owner": owner.name,
+        "waiting": waiting,
+        "ready": False,
+        "winner": ground.winner.name if ground.winner is not None else None,
+    }
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    LIVE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def publish_state(ground: "BattleGround", player: "Player") -> Path:
@@ -90,6 +105,19 @@ def publish_state(ground: "BattleGround", player: "Player") -> Path:
     }
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     ACTION_FILE.unlink(missing_ok=True)
+    LIVE_FILE.write_text(
+        json.dumps(
+            {
+                "turn": ground.turn_count,
+                "owner": player.name,
+                "waiting": True,
+                "ready": True,
+                "winner": None,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     return STATE_FILE
 
 
