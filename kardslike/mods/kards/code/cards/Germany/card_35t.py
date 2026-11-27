@@ -16,6 +16,7 @@ CARD_DATA = CardData(
     country=Country.GERMANY,
     cost=2,
     display_name="35T",
+    art="panzer_35t.png",
     text="闪击。部署：若有友方步兵，行动花费 -1。",
     rare=Rarity.STANDARD,
     at=1,

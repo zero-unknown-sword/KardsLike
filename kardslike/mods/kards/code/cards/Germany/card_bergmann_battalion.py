@@ -19,9 +19,9 @@ CARD_DATA = CardData(
     text="山地。闪击。一回合一次，友方转换卡牌时，抽 1 张牌。",
     art="bergmann_battalion.png",
     rare=Rarity.STANDARD,
-    at=1,
-    df=2,
-    operation_cost=3,
+    at=2,
+    df=3,
+    operation_cost=1,
     keywords=[BLITZ],
     procedures=[
         Procedure(

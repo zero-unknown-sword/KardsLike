@@ -18,9 +18,9 @@ CARD_DATA = CardData(
     text="部署：将 1 个单位转换为溃军；若为友方，抽 2 张牌。",
     art="15th_wolves_regiment.png",
     rare=Rarity.SPECIAL,
-    at=1,
+    at=4,
     df=4,
-    operation_cost=4,
+    operation_cost=1,
     procedures=[
         Procedure(
             EventType.USE,

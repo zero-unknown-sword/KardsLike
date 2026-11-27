@@ -19,9 +19,9 @@ CARD_DATA = CardData(
     text="守护。部署：将 1 个友方单位转换为钢铁师。",
     art="3rd_carpathian.png",
     rare=Rarity.STANDARD,
-    at=1,
-    df=2,
-    operation_cost=4,
+    at=2,
+    df=4,
+    operation_cost=1,
     keywords=[GUARD],
     procedures=[
         Procedure(

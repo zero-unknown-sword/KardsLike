@@ -16,6 +16,7 @@ CARD_DATA = CardData(
     country=Country.POLAND,
     cost=1,
     display_name="4TP",
+    art="4tp.png",
     text="闪击。攻击敌方 HQ 后消灭自身。",
     rare=Rarity.STANDARD,
     at=3,

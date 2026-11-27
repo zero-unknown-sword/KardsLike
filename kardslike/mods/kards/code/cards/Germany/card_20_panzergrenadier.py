@@ -19,9 +19,9 @@ CARD_DATA = CardData(
     text="闪击。部署：获得 1 张 35T 和 1 张协同作战。",
     art="20_panzergrenadier.png",
     rare=Rarity.SPECIAL,
-    at=1,
-    df=3,
-    operation_cost=4,
+    at=3,
+    df=4,
+    operation_cost=1,
     keywords=[BLITZ],
     procedures=[
         Procedure(
