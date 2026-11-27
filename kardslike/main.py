@@ -6649,8 +6649,8 @@ class BattleUI:
             ground.turn_owner.name,
             ground.winner.name if ground.winner is not None else None,
         )
-        if live_key != self.ai_controller.chat_live_key:
-            publish_live(ground, waiting=ground.turn_owner is Player.B)
+        if ground.turn_owner is Player.A and live_key != self.ai_controller.chat_live_key:
+            publish_live(ground, waiting=False)
             self.ai_controller.chat_live_key = live_key
         if ground.winner is not None:
             return

@@ -45,7 +45,7 @@ def main() -> int:
             continue
         if live.get("waiting") and live.get("ready") and str(live.get("owner")) == "B":
             state = read_json(STATE_FILE)
-            if state:
+            if state and str(state.get("turn")) == str(live.get("turn")):
                 print(json.dumps(state, ensure_ascii=False, indent=2))
                 return 0
         time.sleep(0.25)
