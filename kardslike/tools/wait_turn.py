@@ -18,6 +18,7 @@ CHAT_DIR = ROOT / "kardslike" / "chat_ai"
 LIVE_FILE = CHAT_DIR / "live.json"
 STATE_FILE = CHAT_DIR / "state.json"
 ACTION_FILE = CHAT_DIR / "action.json"
+SEEN_FILE = CHAT_DIR / ".wait_seen"
 
 
 def read_json(path: Path) -> dict[str, object]:
@@ -28,11 +29,22 @@ def read_json(path: Path) -> dict[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
+def state_mtime() -> int:
+    try:
+        return STATE_FILE.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--json", action="store_true", help="只输出状态 JSON")
     args = parser.parse_args()
+    try:
+        seen = int(SEEN_FILE.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        seen = 0
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
         live = read_json(LIVE_FILE)
@@ -43,9 +55,16 @@ def main() -> int:
         if ACTION_FILE.exists():
             time.sleep(0.1)
             continue
-        if live.get("waiting") and live.get("ready") and str(live.get("owner")) == "B":
+        mtime = state_mtime()
+        if (
+            live.get("waiting")
+            and live.get("ready")
+            and str(live.get("owner")) == "B"
+            and mtime > seen
+        ):
             state = read_json(STATE_FILE)
             if state and str(state.get("turn")) == str(live.get("turn")):
+                SEEN_FILE.write_text(str(mtime), encoding="utf-8")
                 print(json.dumps(state, ensure_ascii=False, indent=2))
                 return 0
         time.sleep(0.25)
