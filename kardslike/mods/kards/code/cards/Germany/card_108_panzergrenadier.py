@@ -58,8 +58,8 @@ CARD_DATA = CardData(
     text="部署：将一个花费不大于 4 的敌方单位转换为溃军并撤退。",
     art="108_panzergrenadier.png",
     rare=Rarity.LIMITED,
-    at=7,
-    df=5,
+    at=5,
+    df=7,
     operation_cost=1,
     procedures=[
         Procedure(
