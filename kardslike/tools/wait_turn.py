@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CHAT_DIR = ROOT / "kardslike" / "chat_ai"
 LIVE_FILE = CHAT_DIR / "live.json"
 STATE_FILE = CHAT_DIR / "state.json"
+ACTION_FILE = CHAT_DIR / "action.json"
 
 
 def read_json(path: Path) -> dict[str, object]:
@@ -39,6 +40,9 @@ def main() -> int:
         if winner:
             print(f"GAME_OVER winner={winner}")
             return 0
+        if ACTION_FILE.exists():
+            time.sleep(0.1)
+            continue
         if live.get("waiting") and live.get("ready") and str(live.get("owner")) == "B":
             state = read_json(STATE_FILE)
             if state:
