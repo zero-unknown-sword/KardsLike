@@ -18,9 +18,9 @@ CARD_DATA = CardData(
     text="对抗 HQ 或陆军时具有 +2 攻击力。部署：与 1 个敌方单位战斗。",
     art="henschel_hs_129.png",
     rare=Rarity.SPECIAL,
-    at=2,
+    at=5,
     df=4,
-    operation_cost=5,
+    operation_cost=2,
     procedures=[
         Procedure(
             EventType.USE,
