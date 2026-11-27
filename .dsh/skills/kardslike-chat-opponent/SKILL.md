@@ -1,126 +1,116 @@
 ---
 name: kardslike-chat-opponent
-description: 在不调用外部 API 的情况下，通过文件桥读取 KardsLike 的对局状态，并以对话回合代为完成 AI 出牌或结束回合。
+description: 用当前 DSH 会话直接陪用户打 KardsLike。通过 wait_turn 阻塞到 AI 回合，再 send_action 出牌/攻击/结束，循环直到游戏结束，不需要用户每条消息提醒。
 ---
 
-# KardsLike 对话对手
+# KardsLike 当前会话对手
 
-当用户要求“替 AI 出牌”“看一下当前 AI 状态”“用对话和我打牌”时使用本技能。
+当用户说“开打”“用当前会话打”“陪我打一局”时使用本技能。
+
+目标：**在一次对话回合内完成一整局**，不需要用户反复说“到你了”。
 
 ## 前提
 
-玩家已用以下方式启动游戏：
+游戏必须用文件桥模式启动：
 
 ```powershell
 $env:KARDSLIKE_CHAT_AI = "1"
-python kardslike/main.py
+.\.venv\Scripts\python.exe kardslike\main.py
 ```
 
-轮到 AI 时，游戏会暂停，并写入：
+用户只需要在游戏里点一次“开始”。
 
-```text
-kardslike/chat_ai/state.json
-```
+## 两个工具
 
-然后等待：
-
-```text
-kardslike/chat_ai/action.json
-```
-
-等待上限为 300 秒，超时后 AI 自动结束回合。
-
-## 操作流程
-
-### 1. 读取状态
-
-在工作区根目录运行：
+### 读取：等待 AI 回合
 
 ```powershell
-python kardslike/chat_bridge.py show
+.\.venv\Scripts\python.exe kardslike\tools\wait_turn.py --timeout 300
 ```
 
-返回 JSON，包含：
+行为：
+
+- 玩家回合：阻塞不返回
+- 轮到 AI：返回当前完整 `state.json`
+- 游戏结束：返回 `GAME_OVER winner=...`
+- 超时：返回 `WAIT_TIMEOUT`
+
+### 输出：发送动作
+
+```powershell
+.\.venv\Scripts\python.exe kardslike\tools\send_action.py play 0
+.\.venv\Scripts\python.exe kardslike\tools\send_action.py attack 0 hq
+.\.venv\Scripts\python.exe kardslike\tools\send_action.py attack 0 front 0
+.\.venv\Scripts\python.exe kardslike\tools\send_action.py attack 0 support 0
+.\.venv\Scripts\python.exe kardslike\tools\send_action.py end
+```
+
+如果返回：
 
 ```text
-turn
-credits
-hq_df / enemy_hq_df
-hand：手牌下标、名称、费用、类型、攻击、防御、文本
-support：己方支援线
-front：前线
-enemy_support / enemy_front
+NOT_AI_TURN
 ```
 
-### 2. 选择动作
+说明动作发送太晚，AI 回合已结束。不要重发旧动作，直接重新 `wait_turn`。
 
-只能从 `hand` 中选择一个合法下标。
-
-- 打出手牌：
-
-```powershell
-python kardslike/chat_bridge.py play 0
-```
-
-- 支援线单位攻击敌方 HQ：
-
-```powershell
-python kardslike/chat_bridge.py attack 0 hq
-```
-
-- 攻击敌方支援线单位：
-
-```powershell
-python kardslike/chat_bridge.py attack 0 support 0
-```
-
-- 攻击敌方前线单位：
-
-```powershell
-python kardslike/chat_bridge.py attack 0 front 0
-```
-
-- 结束回合：
-
-```powershell
-python kardslike/chat_bridge.py end
-```
-
-写入后游戏会继续执行。
-
-### 3. 再次交互
-
-游戏每进入一次 AI 行动，都会重新生成 `state.json`。重复：
+## 一局循环
 
 ```text
-show -> play/end -> 等待下一次状态
+1. wait_turn
+2. 读状态，选择合法动作
+3. send_action
+4. 如果游戏结束，停止
+5. 否则回到 1
 ```
 
-## 决策要求
-
-- 不要修改 `state.json`
-- 不要直接调用 DeepSeek API
-- 只使用 `chat_bridge.py` 的 `play` / `end`
-- 指向型卡牌目前由游戏自动选择第一个合法目标
-- 若 `credits` 不足或手牌为空，选择 `end`
-- 不要对同一个旧状态重复写入动作
-
-## 文件
+连续调用工具，直到：
 
 ```text
-kardslike/chat_bridge.py
-kardslike/chat_ai/state.json
-kardslike/chat_ai/action.json
+GAME_OVER
 ```
 
-`chat_ai/` 是运行期目录，已被 `.gitignore` 忽略。
+不要每出一张牌就回复用户；打完或遇到异常再总结。
 
-## API 模式
+## 决策规则
 
-如果用户希望不经过对话、直接调用 DeepSeek，可改用：
+- 优先斩杀：能打总部的空军/炮兵先算总伤害，达到敌方 HQ DF 就优先打脸
+- 支援线满 4 个单位时不要再出单位，改用指令或攻击
+- 步兵/坦克只有在前线才能打总部；支援线地面单位打不到总部
+- 守护会挡总部；有守护时优先解守护
+- 烟幕单位不能被普通攻击选中
+- 闪击单位当回合可以行动
+- 不要用低攻单位白送高攻目标；没有好交换就结束回合
+- 能清场、抽牌、保护总部时优先做
+
+## 攻击目标格式
 
 ```text
-APIKEY.txt
+hq             敌方总部
+front N        敌方前线第 N 个单位
+support N      敌方支援线第 N 个单位
 ```
 
-那是另一条 `llm_agent.py` 路径，与本技能的文件桥互斥。
+前线单位攻击时加：
+
+```text
+--line front
+```
+
+例如：
+
+```powershell
+send_action.py attack 0 front 1 --line front
+```
+
+## 异常处理
+
+- `WAIT_TIMEOUT`：游戏可能已退出或没有开始战斗，检查窗口
+- `NOT_AI_TURN`：重新等待，不要重复写动作
+- `action.json` 残留：不要手动删除，下一次 publish_state 会清理
+- 游戏窗口关闭：停止调用工具，总结对局结束
+
+## 不要使用
+
+- 不要启动 `auto_player.py`，那会与本技能的当前会话决策冲突
+- 不要每个动作都向用户请示
+- 不要在用户回合写动作
