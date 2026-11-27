@@ -21,8 +21,8 @@ CARD_DATA = CardData(
     art="danuta.png",
     rare=Rarity.LIMITED,
     at=3,
-    df=4,
-    operation_cost=3,
+    df=3,
+    operation_cost=4,
     keywords=[GUARD, ARMOR.with_val(1)],
     procedures=[
         Procedure(

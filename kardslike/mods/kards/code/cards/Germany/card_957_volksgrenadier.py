@@ -18,8 +18,8 @@ CARD_DATA = CardData(
     text="部署：获得 1 张“生产”。",
     art="957_volksgrenadier.png",
     rare=Rarity.STANDARD,
-    at=3,
-    df=2,
+    at=2,
+    df=3,
     operation_cost=1,
     procedures=[
         Procedure(
