@@ -31,7 +31,7 @@ CARD_DATA = CardData(
     art="arado_ar_196.png",
     rare=Rarity.STANDARD,
     at=1,
-    df=1,
-    operation_cost=2,
+    df=2,
+    operation_cost=1,
     procedures=[Procedure(EventType.USE, deployed, action)],
 )
